@@ -1,0 +1,146 @@
+FROM ubuntu:24.04
+
+# ─────────────────────────────────────────────────────────────────────────
+# Build arguments — override to match your host user so file permissions
+# work correctly when bind-mounting your source/build directories.
+#
+# Example (Podman / Docker):
+#   podman build \
+#     --build-arg BUILD_USER=$(whoami) \
+#     --build-arg BUILD_UID=$(id -u) \
+#     --build-arg BUILD_GID=$(id -g) \
+#     -t wine-builder .
+# ─────────────────────────────────────────────────────────────────────────
+ARG BUILD_USER=winebuilder
+ARG BUILD_UID=1000
+ARG BUILD_GID=1000
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Add i386 architecture for 32-bit Wine components, then do one combined
+# update so intermediate layers stay small.
+RUN dpkg --add-architecture i386 && \
+    apt-get update && \
+    apt-get upgrade -y && \
+    rm -rf /var/lib/apt/lists/*
+
+# ── Core build tools & cross-compilers ───────────────────────────────────
+# Note: gcc-multilib / g++-multilib are intentionally omitted — they conflict
+# with gcc-i686-linux-gnu / g++-i686-linux-gnu on Ubuntu 24.04.
+# The dedicated i686 cross-compilers are the correct approach for Wine's
+# 32-bit build (autoconf recognises the triplet name as a cross-compiler and
+# skips execution tests that would hang on an x86_64 host).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    autoconf \
+    autoconf-archive \
+    automake \
+    libtool \
+    pkg-config \
+    build-essential \
+    gcc-i686-linux-gnu \
+    g++-i686-linux-gnu \
+    mingw-w64 \
+    ccache \
+    git \
+    make \
+    bison \
+    flex \
+    m4 \
+    gawk \
+    rsync \
+    file \
+    patch \
+    perl \
+    python3 \
+    curl \
+    wget \
+    gettext \
+    fzf \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Graphics stack (Wayland, Vulkan, X11) ────────────────────────────────
+# Note: libgles2-mesa-dev was removed in Ubuntu 24.04; use libgles-dev.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libvulkan-dev         libvulkan-dev:i386 \
+    libwayland-dev        libwayland-dev:i386 \
+    wayland-protocols \
+    libxkbcommon-dev      libxkbcommon-dev:i386 \
+    libx11-dev            libx11-dev:i386 \
+    libxcomposite-dev     libxcomposite-dev:i386 \
+    libxcursor-dev        libxcursor-dev:i386 \
+    libxfixes-dev         libxfixes-dev:i386 \
+    libxi-dev             libxi-dev:i386 \
+    libxrandr-dev         libxrandr-dev:i386 \
+    libxrender-dev        libxrender-dev:i386 \
+    libxext-dev           libxext-dev:i386 \
+    libxinerama-dev       libxinerama-dev:i386 \
+    libxxf86vm-dev        libxxf86vm-dev:i386 \
+    libgl1-mesa-dev       libgl1-mesa-dev:i386 \
+    libgles-dev           libgles-dev:i386 \
+    libosmesa6-dev        libosmesa6-dev:i386 \
+    ocl-icd-opencl-dev    ocl-icd-opencl-dev:i386 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Audio & media ─────────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libasound2-dev        libasound2-dev:i386 \
+    libpulse-dev          libpulse-dev:i386 \
+    libopenal-dev         libopenal-dev:i386 \
+    libmpg123-dev         libmpg123-dev:i386 \
+    libsdl2-dev           libsdl2-dev:i386 \
+    libgstreamer1.0-dev   libgstreamer1.0-dev:i386 \
+    libgstreamer-plugins-base1.0-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Crypto, network, printing, directory services ─────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgnutls28-dev       libgnutls28-dev:i386 \
+    libkrb5-dev \
+    libldap2-dev          libldap2-dev:i386 \
+    libcups2-dev          libcups2-dev:i386 \
+    libpcap-dev \
+    libsmbclient-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Image, font & compression ─────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libfreetype-dev       libfreetype-dev:i386 \
+    libfontconfig1-dev    libfontconfig1-dev:i386 \
+    libjpeg-dev           libjpeg-dev:i386 \
+    libpng-dev            libpng-dev:i386 \
+    libtiff-dev           libtiff-dev:i386 \
+    zlib1g-dev            zlib1g-dev:i386 \
+    libxml2-dev           libxml2-dev:i386 \
+    libxslt1-dev          libxslt1-dev:i386 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Hardware / system ─────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libusb-1.0-0-dev      libusb-1.0-0-dev:i386 \
+    libudev-dev           libudev-dev:i386 \
+    libdbus-1-dev         libdbus-1-dev:i386 \
+    libsane-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Create the build user ─────────────────────────────────────────────────
+# We delete the default ubuntu user first (UID 1000) to avoid a clash when
+# BUILD_UID is also 1000.  Errors are suppressed in case it doesn't exist.
+RUN userdel -r ubuntu 2>/dev/null || true
+
+RUN groupadd -g "${BUILD_GID}" "${BUILD_USER}" && \
+    useradd -m -u "${BUILD_UID}" -g "${BUILD_GID}" "${BUILD_USER}" && \
+    mkdir -p "/home/${BUILD_USER}/wine-builder" && \
+    chown -R "${BUILD_USER}:${BUILD_USER}" "/home/${BUILD_USER}"
+
+USER ${BUILD_USER}
+WORKDIR /home/${BUILD_USER}/wine-builder
+
+# ── Default command ───────────────────────────────────────────────────────
+# Mount the repo here and run the builder.  Example:
+#   podman run --rm -it \
+#     -v "$(pwd)":/home/winebuilder/wine-builder:z \
+#     -v "${HOME}/wine-builds":/home/winebuilder/wine-builds:z \
+#     wine-builder \
+#     bash wine-builder.sh --source experimental
+CMD ["bash"]
