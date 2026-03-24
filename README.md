@@ -43,6 +43,7 @@ zenity-based GUI. Or do it all from the CLI.
   - [Wine Install Manager](#-wine-install-manager)
 - [Project Layout](#project-layout)
 - [Data Directories](#data-directories)
+- [Building with Containers (Recommended)](#building-with-containers-recommended)
 - [Requirements](#requirements)
 - [Uninstall](#uninstall)
 
@@ -528,7 +529,100 @@ explicitly `make install PREFIX=/usr/local`.
 
 ---
 
+## Building with Containers (Recommended)
+
+**Containers are the recommended way to build Wine and Proton.** They provide a
+clean, reproducible Ubuntu 24.04 environment with every dependency pre-installed —
+no risk of polluting your host system with hundreds of dev packages.
+
+Both builders ship their own Containerfiles:
+
+| Builder | Containerfile | Image name |
+|---------|--------------|------------|
+| wine-builder | `looni-wine_builder/Containerfile` | `wine-builder` |
+| proton-builder | `looni-proton_builder/Containerfile.proton` | `looni-proton_builder` |
+
+Podman (rootless) is strongly recommended. Docker works too — just drop the `:z`
+volume flags if SELinux is not in use.
+
+### Wine Builder Container
+
+**Build the image** (once):
+
+```bash
+cd looni-wine_builder
+
+podman build \
+    --build-arg BUILD_USER="$(whoami)" \
+    --build-arg BUILD_UID="$(id -u)" \
+    --build-arg BUILD_GID="$(id -g)" \
+    -t wine-builder .
+```
+
+**Run a build:**
+
+```bash
+podman run --rm -it \
+    -v "$(pwd)":/home/"$(whoami)"/wine-builder:z \
+    -v "${HOME}/wine-builds":/home/"$(whoami)"/wine-builds:z \
+    wine-builder \
+    bash wine-builder.sh --source staging
+```
+
+### Proton Builder Container
+
+**Build the image** (once):
+
+```bash
+cd looni-proton_builder
+
+podman build \
+    --build-arg BUILD_USER="$(whoami)" \
+    --build-arg BUILD_UID="$(id -u)" \
+    --build-arg BUILD_GID="$(id -g)" \
+    -t looni-proton_builder \
+    -f Containerfile.proton .
+```
+
+**Run a build:**
+
+```bash
+podman run --rm -it \
+    -v "$(pwd)":/home/"$(whoami)"/looni-proton_builder:z \
+    -v looni-proton_builder-ccache:/home/"$(whoami)"/.ccache:z \
+    looni-proton_builder \
+    bash proton-builder.sh --source proton-wine
+```
+
+### Container Notes
+
+- **Build args** (`BUILD_USER`, `BUILD_UID`, `BUILD_GID`) match your host user so
+  bind-mounted files have correct ownership — no root permission headaches.
+- **ccache volume** — the proton container example uses a named volume for ccache.
+  This persists across runs so rebuilds are dramatically faster.
+- **Image size** is ~5–6 GB. Only rebuild when the Containerfile changes.
+- **ntsync header** — the proton container includes a bundled `ntsync.h` (Linux 6.14+
+  kernel header) since Ubuntu 24.04's `linux-libc-dev` predates ntsync. No manual
+  download needed.
+- All interactive features (fzf pickers, version selectors) work inside the container
+  as long as you pass `-it` for an interactive TTY.
+
+### Installing Podman
+
+```bash
+sudo apt install podman            # Debian / Ubuntu
+sudo dnf install podman            # Fedora
+sudo pacman -S podman              # Arch
+```
+
+---
+
 ## Requirements
+
+> **Using containers?** Skip straight to
+> [Building with Containers](#building-with-containers-recommended) — the
+> Containerfiles handle all build dependencies. The requirements below are only
+> needed for native (host) builds.
 
 ### Core
 
