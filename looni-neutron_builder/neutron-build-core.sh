@@ -1,32 +1,32 @@
 #!/usr/bin/env bash
 # ╔═══════════════════════════════════════════════════════════════════════════╗
-# ║         looni-proton_builder  •  Wine compilation engine                  ║
+# ║         looni-neutron_builder  •  Wine compilation engine                  ║
 # ║   64-bit + 32-bit cross-compile with Proton-specific configure flags      ║
 # ╚═══════════════════════════════════════════════════════════════════════════╝
 #
-# Called by proton-builder.sh.  Can also be invoked standalone if the
+# Called by neutron-builder.sh.  Can also be invoked standalone if the
 # required environment variables are exported first.
 #
 # Required env vars:
 #   WINE_SOURCE     — absolute path to the proton-wine source tree
 #   PREFIX          — absolute install prefix (becomes the 'files/' dir in
-#                     the final Proton package; set by proton-builder.sh)
+#                     the final Proton package; set by neutron-builder.sh)
 #
-# Optional env vars (proton-builder.sh sets all of these automatically):
+# Optional env vars (neutron-builder.sh sets all of these automatically):
 #   WINE_BUILD          — build name; defaults to last component of PREFIX
 #   JOBS                — parallel make threads; defaults to nproc
 #   SKIP_32BIT          — "true" to skip the 32-bit build
 #   BUILD_RUN_DIR       — directory for wine64 / wine32 build trees
-#   CUSTOM_CFG          — path to proton-customization.cfg
+#   CUSTOM_CFG          — path to neutron-customization.cfg
 #   RESUME              — "true" to skip configure if Makefile already present
 #   BUILD_LOG           — path for build log; defaults to BUILD_RUN_DIR/build.log
-#   PROTON_SOURCE_KEY   — "proton-wine" or "proton-wine-experimental"
+#   NEUTRON_SOURCE_KEY  — "proton-wine" or "proton-wine-experimental"
 #                         (used to apply source-specific configure overrides)
 #
 set -euo pipefail
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Output helpers  (mirror proton-builder.sh style; safe when used standalone)
+#  Output helpers  (mirror neutron-builder.sh style; safe when used standalone)
 # ══════════════════════════════════════════════════════════════════════════════
 if [ -t 1 ] && command -v tput >/dev/null 2>&1 && tput colors >/dev/null 2>&1; then
     _R="\033[0m" _B="\033[1m"
@@ -55,7 +55,7 @@ sep()  { printf "\n${_CYN}${_B}── %s ──${_R}\n" "$*"; }
 : "${JOBS:=$(nproc)}"
 : "${SKIP_32BIT:=false}"
 : "${RESUME:=false}"
-: "${PROTON_SOURCE_KEY:=proton-wine}"
+: "${NEUTRON_SOURCE_KEY:=proton-wine}"
 : "${BUILD_RUN_DIR:=$(pwd)/build-run/${WINE_BUILD}}"
 : "${BUILD_LOG:=${BUILD_RUN_DIR}/build.log}"
 
@@ -73,10 +73,10 @@ mkdir -p "${BUILD_RUN_DIR}"
 #  set -o pipefail ensures make's non-zero exit is not hidden by tee.
 # ══════════════════════════════════════════════════════════════════════════════
 {
-    printf '# proton-build-core log\n'
+    printf '# neutron-build-core log\n'
     printf '# Started     : %s\n' "$(date)"
     printf '# Source      : %s\n' "$WINE_SOURCE_DIR"
-    printf '# Source key  : %s\n' "$PROTON_SOURCE_KEY"
+    printf '# Source key  : %s\n' "$NEUTRON_SOURCE_KEY"
     printf '# Install     : %s\n' "$INSTALL_PREFIX"
     printf '# Jobs        : %s\n' "$JOBS"
     printf '# Resume      : %s\n\n' "$RESUME"
@@ -412,7 +412,7 @@ _run_configure() {
 _core_on_error() {
     local exit_code=$?
     local line="$1"
-    printf "\n${_RED}${_B}proton-build-core: failed at line %d (exit %d)${_R}\n\n" \
+    printf "\n${_RED}${_B}neutron-build-core: failed at line %d (exit %d)${_R}\n\n" \
         "$line" "$exit_code" >&2
     if [ -f "$BUILD_LOG" ]; then
         printf "${_YLW}── Last 50 lines of %s ──${_R}\n\n" "$BUILD_LOG" >&2
@@ -427,7 +427,7 @@ trap '_core_on_error $LINENO' ERR
 #  Overview
 # ══════════════════════════════════════════════════════════════════════════════
 sep "Proton Wine Build Core"
-msg2 "Source key  : ${PROTON_SOURCE_KEY}"
+msg2 "Source key  : ${NEUTRON_SOURCE_KEY}"
 msg2 "Source dir  : ${WINE_SOURCE_DIR}"
 msg2 "Install dir : ${INSTALL_PREFIX}"
 msg2 "Build root  : ${BUILD_RUN_DIR}"
@@ -439,7 +439,7 @@ msg2 "Build log   : ${BUILD_LOG}"
 # configure must be executable
 [ -x "${WINE_SOURCE_DIR}/configure" ] || \
     err "configure not found or not executable at: ${WINE_SOURCE_DIR}/configure
-     Has autoreconf been run? proton-builder.sh runs it automatically."
+     Has autoreconf been run? neutron-builder.sh runs it automatically."
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  MinGW cross-compiler validation
@@ -454,7 +454,7 @@ if command -v "$_mingw64" >/dev/null 2>&1; then
 else
     err "64-bit MinGW cross-compiler not found: $_mingw64
      Install: sudo apt install gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
-     (or use the looni-proton_builder container which includes it)"
+     (or use the looni-neutron_builder container which includes it)"
 fi
 if command -v "$_mingw32" >/dev/null 2>&1; then
     ok "32-bit MinGW: $( "$_mingw32" --version | head -1 )"
@@ -523,7 +523,7 @@ fi
 #  config here, where the arrays are actually used.
 # ══════════════════════════════════════════════════════════════════════════════
 sep "Loading configuration"
-_CFG="${CUSTOM_CFG:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/proton-customization.cfg}"
+_CFG="${CUSTOM_CFG:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/neutron-customization.cfg}"
 if [ -f "$_CFG" ]; then
     msg2 "Sourcing: $_CFG"
     # shellcheck source=/dev/null
@@ -553,7 +553,7 @@ _args_32=(     "${_configure_args32[@]+"${_configure_args32[@]}"}" )
 
 # ── Source-specific configure overrides ──────────────────────────────────────
 # Different upstream forks have different expectations around SDL and MinGW.
-case "${PROTON_SOURCE_KEY}" in
+case "${NEUTRON_SOURCE_KEY}" in
     proton-wine-experimental)
         # Valve's bleeding-edge fork has its own SDL input stack — the standard
         # --with-sdl configure path conflicts with it.
@@ -770,7 +770,7 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Verify build artifacts before handing back to proton-builder.sh
+#  Verify build artifacts before handing back to neutron-builder.sh
 # ══════════════════════════════════════════════════════════════════════════════
 sep "Verifying build artifacts"
 
@@ -804,4 +804,4 @@ sep "Wine build complete"
 ok "All proton-wine components compiled successfully"
 msg2 "Build artifacts  : ${BUILD_RUN_DIR}"
 msg2 "Build log        : ${BUILD_LOG}"
-msg2 "proton-builder.sh will now run 'make install' and package the build."
+msg2 "neutron-builder.sh will now run 'make install' and package the build."

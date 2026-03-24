@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # ╔═══════════════════════════════════════════════════════════════════════════╗
-# ║         looni-proton_builder  •  VKD3D-Proton build                       ║
+# ║         looni-neutron_builder  •  VKD3D-Proton build                       ║
 # ║   Cross-compiles VKD3D-Proton (D3D12 → Vulkan) for x86 and x86_64        ║
 # ╚═══════════════════════════════════════════════════════════════════════════╝
 #
-# Required env vars (set by proton-builder.sh):
+# Required env vars (set by neutron-builder.sh):
 #   VKD3D_SOURCE_DIR    — path to the cloned VKD3D-Proton source tree
 #   VKD3D_SOURCE_KEY    — vkd3d-proton
-#   PROTON_PACKAGE_DIR  — root of the Proton package being assembled
+#   NEUTRON_PACKAGE_DIR  — root of the Proton package being assembled
 #
 # VKD3D-Proton output layout inside the Proton package:
 #   files/lib/wine/vkd3d-proton/   — 32-bit d3d12.dll + d3d12core.dll
 #   files/lib64/wine/vkd3d-proton/ — 64-bit d3d12.dll + d3d12core.dll
 #
 # widl (Wine's IDL compiler) is required and is taken from the built Wine
-# install inside PROTON_PACKAGE_DIR/files/bin/widl.
+# install inside NEUTRON_PACKAGE_DIR/files/bin/widl.
 #
 set -euo pipefail
 
@@ -34,7 +34,7 @@ sep()  { printf "\n${_BLU}${_B}── %s ──${_R}\n" "$*"; }
 
 # ── Validate required env ─────────────────────────────────────────────────────
 : "${VKD3D_SOURCE_DIR:?VKD3D_SOURCE_DIR must be set}"
-: "${PROTON_PACKAGE_DIR:?PROTON_PACKAGE_DIR must be set}"
+: "${NEUTRON_PACKAGE_DIR:?NEUTRON_PACKAGE_DIR must be set}"
 : "${VKD3D_SOURCE_KEY:=vkd3d-proton}"
 : "${JOBS:=$(nproc)}"
 
@@ -44,8 +44,8 @@ sep()  { printf "\n${_BLU}${_B}── %s ──${_R}\n" "$*"; }
     err "meson.build not found in: $VKD3D_SOURCE_DIR"
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-VKD3D_DEST_32="${PROTON_PACKAGE_DIR}/files/lib/wine/vkd3d-proton"
-VKD3D_DEST_64="${PROTON_PACKAGE_DIR}/files/lib64/wine/vkd3d-proton"
+VKD3D_DEST_32="${NEUTRON_PACKAGE_DIR}/files/lib/wine/vkd3d-proton"
+VKD3D_DEST_64="${NEUTRON_PACKAGE_DIR}/files/lib64/wine/vkd3d-proton"
 BUILD_DIR_32="${VKD3D_SOURCE_DIR}/build/x32"
 BUILD_DIR_64="${VKD3D_SOURCE_DIR}/build/x64"
 VKD3D_INCLUDE_DIR="${VKD3D_SOURCE_DIR}/include"
@@ -53,7 +53,7 @@ WRAPPER_DIR="${VKD3D_SOURCE_DIR}/.compiler-wrappers"
 
 # widl — Wine's IDL compiler, required by VKD3D-Proton.
 # Use the widl we already compiled as part of the Wine build.
-WINE_FILES_DIR="${PROTON_PACKAGE_DIR}/files"
+WINE_FILES_DIR="${NEUTRON_PACKAGE_DIR}/files"
 WIDL_PATH="${WINE_FILES_DIR}/bin/widl"
 
 sep "VKD3D-Proton build"
@@ -70,7 +70,7 @@ msg2 "Jobs        : ${JOBS}"
 #  case where VKD3D-Proton was built in a prior run and the user just wants to
 #  (re)package it into a new Wine build without rebuilding from source.
 #
-#  Pass FORCE_REBUILD=true (or --vkd3d-only from proton-builder.sh) to skip
+#  Pass FORCE_REBUILD=true (or --vkd3d-only from neutron-builder.sh) to skip
 #  this check and always rebuild from source.
 # ══════════════════════════════════════════════════════════════════════════════
 _vkd3d_prebuilt_count_64=$(find "$BUILD_DIR_64" -name '*.dll' 2>/dev/null | wc -l)

@@ -18,7 +18,7 @@ _find_tool() {
     # Source tree layout: each tool lives in its own subdirectory
     case "$name" in
         wine-builder)       _bin="${SCRIPT_DIR}/looni-wine_builder/wine-builder.sh" ;;
-        proton-builder)     _bin="${SCRIPT_DIR}/looni-proton_builder/proton-builder.sh" ;;
+        neutron-builder)    _bin="${SCRIPT_DIR}/looni-neutron_builder/neutron-builder.sh" ;;
         wine-proton_hybrid) _bin="${SCRIPT_DIR}/looni-wine-proton_hybrid_builder/wine-proton_hybrid-v1_0_0.sh" ;;
         wine_toolz)         _bin="${SCRIPT_DIR}/looni-winetoolz/wine_toolz.sh" ;;
         wine_install_mgr)   _bin="${SCRIPT_DIR}/looni-winetoolz/modules/shared_lib/wine_install_manager.sh" ;;
@@ -70,19 +70,19 @@ printf "${C_R}\n"
 declare -A TOOL_KEY TOOL_DESC
 TOOL_KEY=(
     [1]="wine-builder"
-    [2]="proton-builder"
+    [2]="neutron-builder"
     [3]="wine-proton_hybrid"
     [4]="wine_toolz"
     [5]="wine_install_mgr"
 )
 TOOL_DESC=(
     [1]="🛠  wine-builder          — build Wine from source (mainline, staging, TKG, Valve…)"
-    [2]="🎮  proton-builder        — build Proton (Valve, Kron4ek, GE, TKG variants…)"
+    [2]="🎮  neutron-builder       — build Proton (Valve, Kron4ek, GE, TKG variants…)"
     [3]="⇌   wine-proton_hybrid    — merge any Wine build over a Proton base"
     [4]="⚙   wine_toolz            — GUI Wine toolkit (DXVK, prefixes, runtimes…)"
     [5]="📦  wine_install_mgr      — install, switch, and manage custom Wine builds"
 )
-TOOL_KEYS=( wine-builder proton-builder wine-proton_hybrid wine_toolz wine_install_mgr )
+TOOL_KEYS=( wine-builder neutron-builder wine-proton_hybrid wine_toolz wine_install_mgr )
 
 # ── Launch + menu loop ────────────────────────────────────────────────────────
 _launch() {

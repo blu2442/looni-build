@@ -37,7 +37,7 @@ zenity-based GUI. Or do it all from the CLI.
 - [Install](#install)
 - [Tools](#tools)
   - [wine-builder](#-wine-builder--looni-wine_builder)
-  - [proton-builder](#-proton-builder--looni-proton_builder)
+  - [neutron-builder](#-neutron-builder--looni-neutron_builder)
   - [wine-proton_hybrid](#-wine-proton_hybrid--looni-wine-proton_hybrid_builder)
   - [wine_toolz](#-wine_toolz--looni-winetoolz)
   - [Wine Install Manager](#-wine-install-manager)
@@ -59,7 +59,7 @@ source ~/.bashrc
 
 looni-build             # main menu — pick any tool
 wine-builder            # build Wine interactively
-proton-builder          # build Proton interactively
+neutron-builder          # build Proton interactively
 wine_toolz              # open the GUI toolkit
 wine-proton_hybrid      # hybrid installer
 ```
@@ -77,7 +77,7 @@ make install DESTDIR=/tmp/pkg       # staged for packaging
 Selective install:
 
 ```bash
-make install-proton     # proton_builder only
+make install-neutron     # neutron_builder only
 make install-wine       # wine_builder only
 make install-hybrid     # hybrid_builder only
 make install-toolz      # winetoolz only
@@ -157,21 +157,21 @@ tree with `bin/wine`, `lib/`, etc.
 
 ---
 
-### 🎮 proton-builder — looni-proton_builder
+### 🎮 neutron-builder — looni-neutron_builder
 
 Builds a complete custom Proton package for Steam from source: proton-wine + DXVK +
 VKD3D-Proton, assembled into a `compatibilitytool.vdf` package ready to drop into
 Steam.
 
 ```bash
-proton-builder                                  # interactive wizard
-proton-builder --source proton-wine             # Valve proton-wine (branch picker)
-proton-builder --source proton-wine --branch proton_9.0
-proton-builder --source kron4ek-tkg             # Kron4ek wine-tkg + ntsync
-proton-builder --dxvk-only                      # rebuild DXVK only, skip Wine
-proton-builder --vkd3d-only                     # rebuild VKD3D-Proton only
-proton-builder --reinstall-components           # re-package without rebuilding
-proton-builder --list                           # show installed Proton builds
+neutron-builder                                  # interactive wizard
+neutron-builder --source proton-wine             # Valve proton-wine (branch picker)
+neutron-builder --source proton-wine --branch proton_9.0
+neutron-builder --source kron4ek-tkg             # Kron4ek wine-tkg + ntsync
+neutron-builder --dxvk-only                      # rebuild DXVK only, skip Wine
+neutron-builder --vkd3d-only                     # rebuild VKD3D-Proton only
+neutron-builder --reinstall-components           # re-package without rebuilding
+neutron-builder --list                           # show installed Proton builds
 ```
 
 #### Proton Wine Sources
@@ -206,7 +206,7 @@ proton-builder --list                           # show installed Proton builds
 | `--vkd3d NAME` | VKD3D variant (`vkd3d-proton` \| `none`) |
 | `--dxvk-branch BRANCH` | Pin DXVK to specific tag |
 | `--vkd3d-branch BRANCH` | Pin VKD3D-Proton to specific tag |
-| `--name NAME` | Build name (default: `looni-proton-<ver>`) |
+| `--name NAME` | Build name (default: `looni-neutron-<ver>`) |
 | `--dest DIR` | Root for build artefacts |
 | `--src-dir DIR` | Root for git clones |
 | `--jobs N` | Parallel make threads (default: `nproc`) |
@@ -220,7 +220,7 @@ proton-builder --list                           # show installed Proton builds
 | `--dxvk-only` | Rebuild DXVK only (skip Wine) |
 | `--vkd3d-only` | Rebuild VKD3D-Proton only (skip Wine) |
 | `--reinstall-components` | Re-package without rebuilding |
-| `--cfg PATH` | Alternate `proton-customization.cfg` |
+| `--cfg PATH` | Alternate `neutron-customization.cfg` |
 | `--list` | Show installed Proton builds |
 | `--dry-run` | Print planned actions |
 
@@ -229,7 +229,7 @@ proton-builder --list                           # show installed Proton builds
 After a successful build:
 
 ```bash
-cp -r ~/.local/share/looni-proton_builder/buildz/install/<name> \
+cp -r ~/.local/share/looni-neutron_builder/buildz/install/<name> \
       ~/.steam/debian-installation/compatibilitytools.d/
 ```
 
@@ -412,17 +412,17 @@ looni-build/
 │   ├── patches/                                Drop .patch/.diff files here
 │   └── deps-tkg                                TKG dependency list
 │
-├── looni-proton_builder/
-│   ├── proton-builder.sh                        Entry point
-│   ├── proton-build-core.sh                     Build engine
-│   ├── proton-dxvk-build.sh                     DXVK builder (meson/ninja)
-│   ├── proton-vkd3d-build.sh                    VKD3D-Proton builder
-│   ├── proton-package.sh                        Steam package assembler
+├── looni-neutron_builder/
+│   ├── neutron-builder.sh                        Entry point
+│   ├── neutron-build-core.sh                     Build engine
+│   ├── neutron-dxvk-build.sh                     DXVK builder (meson/ninja)
+│   ├── neutron-vkd3d-build.sh                    VKD3D-Proton builder
+│   ├── neutron-package.sh                        Steam package assembler
 │   ├── spinner.sh                               Progress animation
 │   ├── ntsync.h                                 Kernel header for ntsync support
-│   ├── proton-customization.cfg                 Build config
+│   ├── neutron-customization.cfg                 Build config
 │   ├── patches/                                 Drop .patch/.diff files here
-│   └── deps-proton-tkg                          TKG dependency list
+│   └── deps-neutron-tkg                          TKG dependency list
 │
 ├── looni-wine-proton_hybrid_builder/
 │   ├── wine-proton_hybrid-v1.0.0.sh            Hybrid installer
@@ -467,12 +467,12 @@ explicitly `make install PREFIX=/usr/local`.
 ~/.local/
 ├── bin/
 │   ├── looni-build             Main menu
-│   ├── proton-builder          Proton builder
+│   ├── neutron-builder          Proton builder
 │   ├── wine-builder            Wine builder
 │   ├── wine_toolz              winetoolz GUI
 │   └── wine-proton_hybrid      Hybrid installer
 └── lib/
-    ├── looni-proton_builder/   Engine scripts + patches/
+    ├── looni-neutron_builder/   Engine scripts + patches/
     ├── looni-wine_builder/     Engine scripts + patches/
     ├── looni-wine-proton_hybrid_builder/
     └── looni-winetoolz/        Modules + shared_lib/
@@ -488,7 +488,7 @@ explicitly `make install PREFIX=/usr/local`.
 │   │   └── build-run/          In-progress build trees
 │   └── src/                    Git-cloned Wine sources
 │
-├── looni-proton_builder/
+├── looni-neutron_builder/
 │   ├── buildz/
 │   │   ├── install/            Completed Proton packages
 │   │   └── build-run/          In-progress builds
@@ -508,7 +508,7 @@ explicitly `make install PREFIX=/usr/local`.
 ```
 ~/.config/looni-build/
 ├── customization.cfg           wine-builder compile flags (never overwritten on reinstall)
-├── proton-customization.cfg    proton-builder compile flags
+├── neutron-customization.cfg    neutron-builder compile flags
 └── winetoolz.cfg               winetoolz preferences
 
 ~/.config/winetoolz/
@@ -540,7 +540,7 @@ Both builders ship their own Containerfiles:
 | Builder | Containerfile | Image name |
 |---------|--------------|------------|
 | wine-builder | `looni-wine_builder/Containerfile` | `wine-builder` |
-| proton-builder | `looni-proton_builder/Containerfile.proton` | `looni-proton_builder` |
+| neutron-builder | `looni-neutron_builder/Containerfile.neutron` | `looni-neutron_builder` |
 
 Podman (rootless) is strongly recommended. Docker works too — just drop the `:z`
 volume flags if SELinux is not in use.
@@ -574,24 +574,24 @@ podman run --rm -it \
 **Build the image** (once):
 
 ```bash
-cd looni-proton_builder
+cd looni-neutron_builder
 
 podman build \
     --build-arg BUILD_USER="$(whoami)" \
     --build-arg BUILD_UID="$(id -u)" \
     --build-arg BUILD_GID="$(id -g)" \
-    -t looni-proton_builder \
-    -f Containerfile.proton .
+    -t looni-neutron_builder \
+    -f Containerfile.neutron .
 ```
 
 **Run a build:**
 
 ```bash
 podman run --rm -it \
-    -v "$(pwd)":/home/"$(whoami)"/looni-proton_builder:z \
-    -v looni-proton_builder-ccache:/home/"$(whoami)"/.ccache:z \
-    looni-proton_builder \
-    bash proton-builder.sh --source proton-wine
+    -v "$(pwd)":/home/"$(whoami)"/looni-neutron_builder:z \
+    -v looni-neutron_builder-ccache:/home/"$(whoami)"/.ccache:z \
+    looni-neutron_builder \
+    bash neutron-builder.sh --source proton-wine
 ```
 
 ### Container Notes
@@ -629,7 +629,7 @@ sudo pacman -S podman              # Arch
 | Tool | Used by | Notes |
 |------|---------|-------|
 | `bash` 4.4+ | All | Required |
-| `git` | wine-builder, proton-builder | Source fetching |
+| `git` | wine-builder, neutron-builder | Source fetching |
 | `zenity` | winetoolz, Wine Install Manager | GUI dialogs |
 | `fzf` | All builders, main menu | Optional — nicer interactive pickers |
 
@@ -637,12 +637,12 @@ sudo pacman -S podman              # Arch
 
 | Tool | Used by |
 |------|---------|
-| `make`, `gcc`, `g++`, `autoconf`, `automake` | wine-builder, proton-builder |
-| `pkg-config` | wine-builder, proton-builder |
+| `make`, `gcc`, `g++`, `autoconf`, `automake` | wine-builder, neutron-builder |
+| `pkg-config` | wine-builder, neutron-builder |
 | `i686-linux-gnu-gcc`, `i686-linux-gnu-g++` | 32-bit Wine builds |
 | `x86_64-w64-mingw32-gcc`, `x86_64-w64-mingw32-g++` | MinGW cross-compile |
-| `meson`, `ninja` | proton-builder (DXVK / VKD3D-Proton) |
-| `glslangValidator` | proton-builder (DXVK / VKD3D-Proton) |
+| `meson`, `ninja` | neutron-builder (DXVK / VKD3D-Proton) |
+| `glslangValidator` | neutron-builder (DXVK / VKD3D-Proton) |
 | `ccache` | Optional — strongly recommended for rebuilds |
 
 ### Runtime Dependencies
@@ -678,7 +678,7 @@ clean up `~/.bashrc` entries.
 **Config files** in `~/.config/looni-build/` are **kept** — remove manually if wanted.
 
 **Build output** in `~/.local/share/looni-wine_builder/` and
-`~/.local/share/looni-proton_builder/` is **kept** — these are your compiled builds.
+`~/.local/share/looni-neutron_builder/` is **kept** — these are your compiled builds.
 
 **Managed Wine installs** in `~/.local/share/looni-wine-installs/` are **kept** —
 use the Wine Install Manager to remove individual builds first, or delete the

@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # ╔═══════════════════════════════════════════════════════════════════════════╗
-# ║         looni-proton_builder  •  Proton packager                          ║
+# ║         looni-neutron_builder  •  Proton packager                          ║
 # ║   Assembles a Steam-loadable compatibilitytool from compiled components   ║
 # ╚═══════════════════════════════════════════════════════════════════════════╝
 #
-# Called by proton-builder.sh after all components are compiled.
+# Called by neutron-builder.sh after all components are compiled.
 # Can also be invoked standalone if the required environment vars are set.
 #
 # Required env vars:
-#   PROTON_PACKAGE_DIR   — root of the Proton package being assembled
-#   WINE_INSTALL_PREFIX  — where Wine was installed (= PROTON_PACKAGE_DIR/files)
+#   NEUTRON_PACKAGE_DIR  — root of the Proton package being assembled
+#   WINE_INSTALL_PREFIX  — where Wine was installed (= NEUTRON_PACKAGE_DIR/files)
 #   BUILD_NAME           — human-readable name for this Proton build
 #
-# Optional env vars (proton-builder.sh sets all of these):
+# Optional env vars (neutron-builder.sh sets all of these):
 #   DXVK_SOURCE_KEY      — dxvk | dxvk-async | none   (used for display only)
 #   VKD3D_SOURCE_KEY     — vkd3d-proton | none          (used for display only)
 #
@@ -33,7 +33,7 @@ err()  { printf "${_RED}ERR!${_R} %s\n" "$*" >&2; exit 1; }
 sep()  { printf "\n${_BLU}${_B}── %s ──${_R}\n" "$*"; }
 
 # ── Validate required env ─────────────────────────────────────────────────────
-: "${PROTON_PACKAGE_DIR:?PROTON_PACKAGE_DIR must be set}"
+: "${NEUTRON_PACKAGE_DIR:?NEUTRON_PACKAGE_DIR must be set}"
 : "${WINE_INSTALL_PREFIX:?WINE_INSTALL_PREFIX must be set}"
 : "${BUILD_NAME:?BUILD_NAME must be set}"
 : "${DXVK_SOURCE_KEY:=none}"
@@ -42,13 +42,13 @@ sep()  { printf "\n${_BLU}${_B}── %s ──${_R}\n" "$*"; }
 # ── Sanity: Wine must actually be installed ───────────────────────────────────
 [ -d "$WINE_INSTALL_PREFIX" ] || \
     err "Wine install prefix not found: $WINE_INSTALL_PREFIX
-     Run proton-build-core.sh (or proton-builder.sh) first."
+     Run neutron-build-core.sh (or neutron-builder.sh) first."
 [ -f "${WINE_INSTALL_PREFIX}/bin/wine" ] || \
     err "Wine binary not found at: ${WINE_INSTALL_PREFIX}/bin/wine
      The Wine build may not have installed correctly."
 
 sep "Proton Packager"
-msg2 "Package dir  : ${PROTON_PACKAGE_DIR}"
+msg2 "Package dir  : ${NEUTRON_PACKAGE_DIR}"
 msg2 "Wine prefix  : ${WINE_INSTALL_PREFIX}"
 msg2 "Build name   : ${BUILD_NAME}"
 
@@ -66,7 +66,7 @@ msg2 "Wine version : ${_wine_ver}"
 #  game's compatibility settings dropdown.
 # ══════════════════════════════════════════════════════════════════════════════
 sep "Writing compatibilitytool.vdf"
-cat > "${PROTON_PACKAGE_DIR}/compatibilitytool.vdf" << EOF
+cat > "${NEUTRON_PACKAGE_DIR}/compatibilitytool.vdf" << EOF
 "compatibilitytools"
 {
   "compat_tools"
@@ -96,7 +96,7 @@ ok "compatibilitytool.vdf written"
 #  Add it back if you want full Steam Runtime isolation.
 # ══════════════════════════════════════════════════════════════════════════════
 sep "Writing toolmanifest.vdf"
-cat > "${PROTON_PACKAGE_DIR}/toolmanifest.vdf" << 'EOF'
+cat > "${NEUTRON_PACKAGE_DIR}/toolmanifest.vdf" << 'EOF'
 "manifest"
 {
   "manifest_version"   "2"
@@ -127,9 +127,9 @@ ok "toolmanifest.vdf written"
 #
 # ══════════════════════════════════════════════════════════════════════════════
 sep "Writing proton launcher script"
-cat > "${PROTON_PACKAGE_DIR}/proton" << 'PROTON_SCRIPT'
+cat > "${NEUTRON_PACKAGE_DIR}/proton" << 'PROTON_SCRIPT'
 #!/usr/bin/env python3
-# looni-proton launcher
+# looni-neutron launcher
 # Steam invokes this script with a verb and optional arguments.
 #
 # Verbs Steam uses:
@@ -406,17 +406,17 @@ else:
     verb_run([VERB] + EXTRA_ARGS)
 PROTON_SCRIPT
 
-chmod +x "${PROTON_PACKAGE_DIR}/proton"
+chmod +x "${NEUTRON_PACKAGE_DIR}/proton"
 ok "proton launcher written"
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Write a minimal README inside the package
 # ══════════════════════════════════════════════════════════════════════════════
 sep "Writing package README"
-cat > "${PROTON_PACKAGE_DIR}/README.md" << EOF
+cat > "${NEUTRON_PACKAGE_DIR}/README.md" << EOF
 # ${BUILD_NAME}
 
-Built by **looni-proton_builder**.
+Built by **looni-neutron_builder**.
 
 | Component       | Status                                       |
 |-----------------|----------------------------------------------|
@@ -429,14 +429,14 @@ Built by **looni-proton_builder**.
 Copy this directory into Steam's compatibility tools folder and restart Steam:
 
 \`\`\`bash
-cp -r "$(basename "$PROTON_PACKAGE_DIR")" ~/.local/share/Steam/compatibilitytools.d/
+cp -r "$(basename "$NEUTRON_PACKAGE_DIR")" ~/.local/share/Steam/compatibilitytools.d/
 \`\`\`
 
 Then open a game's Properties → Compatibility and select **${_display_name}**.
 
 ## Built with
 
-- [looni-proton_builder](https://github.com/blu2442/looni-proton_builder)
+- [looni-neutron_builder](https://github.com/blu2442/looni-neutron_builder)
 - [ValveSoftware/wine](https://github.com/ValveSoftware/wine)
 EOF
 ok "README written"
@@ -455,18 +455,18 @@ _verify() {
     fi
 }
 
-_verify "${PROTON_PACKAGE_DIR}/compatibilitytool.vdf" "compatibilitytool.vdf"
-_verify "${PROTON_PACKAGE_DIR}/toolmanifest.vdf"       "toolmanifest.vdf"
-_verify "${PROTON_PACKAGE_DIR}/proton"                 "proton launcher"
+_verify "${NEUTRON_PACKAGE_DIR}/compatibilitytool.vdf" "compatibilitytool.vdf"
+_verify "${NEUTRON_PACKAGE_DIR}/toolmanifest.vdf"       "toolmanifest.vdf"
+_verify "${NEUTRON_PACKAGE_DIR}/proton"                 "proton launcher"
 _verify "${WINE_INSTALL_PREFIX}/bin/wine"              "files/bin/wine"
 _verify "${WINE_INSTALL_PREFIX}/bin/wineserver"        "files/bin/wineserver"
 _verify "${WINE_INSTALL_PREFIX}/bin/wine64"            "files/bin/wine64"
 
 # ── Package size ──────────────────────────────────────────────────────────────
-_pkg_size="$(du -sh "$PROTON_PACKAGE_DIR" 2>/dev/null | cut -f1)"
+_pkg_size="$(du -sh "$NEUTRON_PACKAGE_DIR" 2>/dev/null | cut -f1)"
 ok "Package size: ${_pkg_size}"
 
 sep "Packaging complete"
-ok "Proton package ready at: ${PROTON_PACKAGE_DIR}"
-msg2 "To install:  cp -r ${PROTON_PACKAGE_DIR} ~/.local/share/Steam/compatibilitytools.d/"
+ok "Proton package ready at: ${NEUTRON_PACKAGE_DIR}"
+msg2 "To install:  cp -r ${NEUTRON_PACKAGE_DIR} ~/.local/share/Steam/compatibilitytools.d/"
 msg2 "Then restart Steam and enable in game Properties → Compatibility."

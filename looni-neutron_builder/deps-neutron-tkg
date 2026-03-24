@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ╔═══════════════════════════════════════════════════════════════════════════╗
-# ║  looni-proton_builder  •  deps-proton-tkg                                 ║
+# ║  looni-neutron_builder  •  deps-neutron-tkg                                ║
 # ║  Ubuntu 24.04 (Noble) compatible dependency installer for proton-tkg      ║
 # ╚═══════════════════════════════════════════════════════════════════════════╝
 #

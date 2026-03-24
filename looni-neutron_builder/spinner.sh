@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ╔═══════════════════════════════════════════════════════════════════════════╗
-# ║  looni-proton_builder • Clean Terminal Output Utility                     ║
+# ║  looni-neutron_builder • Clean Terminal Output Utility                     ║
 # ╚═══════════════════════════════════════════════════════════════════════════╝
 #
 # Usage:

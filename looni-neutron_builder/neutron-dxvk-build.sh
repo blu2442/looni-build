@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # ╔═══════════════════════════════════════════════════════════════════════════╗
-# ║         looni-proton_builder  •  DXVK build                               ║
+# ║         looni-neutron_builder  •  DXVK build                               ║
 # ║   Cross-compiles DXVK (D3D9/10/11 → Vulkan) for both x86 and x86_64      ║
 # ╚═══════════════════════════════════════════════════════════════════════════╝
 #
-# Required env vars (set by proton-builder.sh):
+# Required env vars (set by neutron-builder.sh):
 #   DXVK_SOURCE_DIR     — path to the cloned DXVK source tree
 #   DXVK_SOURCE_KEY     — dxvk | dxvk-async
-#   PROTON_PACKAGE_DIR  — root of the Proton package being assembled
+#   NEUTRON_PACKAGE_DIR  — root of the Proton package being assembled
 #
 # DXVK output layout inside the Proton package:
 #   files/lib/wine/dxvk/   — 32-bit .dll files (d3d9, d3d10*, d3d11, dxgi)
@@ -39,7 +39,7 @@ sep()  { printf "\n${_BLU}${_B}── %s ──${_R}\n" "$*"; }
 
 # ── Validate required env ─────────────────────────────────────────────────────
 : "${DXVK_SOURCE_DIR:?DXVK_SOURCE_DIR must be set to the DXVK source tree}"
-: "${PROTON_PACKAGE_DIR:?PROTON_PACKAGE_DIR must be set to the Proton package root}"
+: "${NEUTRON_PACKAGE_DIR:?NEUTRON_PACKAGE_DIR must be set to the Proton package root}"
 : "${DXVK_SOURCE_KEY:=dxvk}"
 : "${JOBS:=$(nproc)}"
 
@@ -49,8 +49,8 @@ sep()  { printf "\n${_BLU}${_B}── %s ──${_R}\n" "$*"; }
     err "meson.build not found in: $DXVK_SOURCE_DIR"
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-DXVK_DEST_32="${PROTON_PACKAGE_DIR}/files/lib/wine/dxvk"
-DXVK_DEST_64="${PROTON_PACKAGE_DIR}/files/lib64/wine/dxvk"
+DXVK_DEST_32="${NEUTRON_PACKAGE_DIR}/files/lib/wine/dxvk"
+DXVK_DEST_64="${NEUTRON_PACKAGE_DIR}/files/lib64/wine/dxvk"
 BUILD_DIR_32="${DXVK_SOURCE_DIR}/build/x32"
 BUILD_DIR_64="${DXVK_SOURCE_DIR}/build/x64"
 DXVK_INCLUDE_DIR="${DXVK_SOURCE_DIR}/include"
@@ -75,7 +75,7 @@ msg2 "Jobs        : ${JOBS}"
 #  case where DXVK was built in a prior run and the user just wants to
 #  (re)package it into a new Wine build without rebuilding from source.
 #
-#  Pass FORCE_REBUILD=true (or --dxvk-only from proton-builder.sh) to skip
+#  Pass FORCE_REBUILD=true (or --dxvk-only from neutron-builder.sh) to skip
 #  this check and always rebuild from source.
 # ══════════════════════════════════════════════════════════════════════════════
 _dxvk_prebuilt_count_64=$(find "$BUILD_DIR_64" -name '*.dll' 2>/dev/null | wc -l)

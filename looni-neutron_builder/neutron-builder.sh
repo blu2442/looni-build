@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ╔═════════════════════════════════════════════════════════════════════════════╗
-# ║            looni-proton_builder  •  multi-component  v1.0.0                ║
+# ║            looni-neutron_builder  •  multi-component  v1.0.0               ║
 # ║          proton-wine  •  DXVK  •  VKD3D-Proton  •  Steam package          ║
 # ╚═════════════════════════════════════════════════════════════════════════════╝
 #
@@ -11,11 +11,11 @@
 #   • Packaging    — Steam-loadable Proton layout (compatibilitytool.vdf etc.)
 #
 # Phase 2 (coming next):
-#   • DXVK        — D3D9/10/11 → Vulkan (proton-dxvk-build.sh)
-#   • VKD3D-Proton — D3D12 → Vulkan (proton-vkd3d-build.sh)
+#   • DXVK        — D3D9/10/11 → Vulkan (neutron-dxvk-build.sh)
+#   • VKD3D-Proton — D3D12 → Vulkan (neutron-vkd3d-build.sh)
 #
-# Usage:  ./proton-builder.sh [options]
-#         ./proton-builder.sh --help
+# Usage:  ./neutron-builder.sh [options]
+#         ./neutron-builder.sh --help
 #
 set -euo pipefail
 IFS=$'\n\t'
@@ -72,7 +72,7 @@ WOLF
     printf "\n"
     printf "  ╔═══════════════════════════════════════════════════════════════╗\n"
     printf "  ║                                                               ║\n"
-    printf "  ║  🎮  looni-proton_builder  •  multi-component v1.0.0          ║\n"
+    printf "  ║  🎮  looni-neutron_builder  •  multi-component v1.0.0         ║\n"
     printf "  ║      proton-wine  •  DXVK  •  VKD3D-Proton  •  package        ║\n"
     printf "  ║                                                               ║\n"
     printf "  ╚═══════════════════════════════════════════════════════════════╝\n"
@@ -155,11 +155,11 @@ SKIP_WINE_BUILD=false      # set by --dxvk-only / --vkd3d-only
 SKIP_DXVK=false           # set by --vkd3d-only
 REINSTALL_COMPONENTS=false # set by --reinstall-components
 DRY_RUN=0
-CUSTOM_CFG="${SCRIPT_DIR}/proton-customization.cfg"
-BUILD_CORE="${SCRIPT_DIR}/proton-build-core.sh"
-PACKAGER="${SCRIPT_DIR}/proton-package.sh"
-DXVK_BUILDER="${SCRIPT_DIR}/proton-dxvk-build.sh"
-VKD3D_BUILDER="${SCRIPT_DIR}/proton-vkd3d-build.sh"
+CUSTOM_CFG="${SCRIPT_DIR}/neutron-customization.cfg"
+BUILD_CORE="${SCRIPT_DIR}/neutron-build-core.sh"
+PACKAGER="${SCRIPT_DIR}/neutron-package.sh"
+DXVK_BUILDER="${SCRIPT_DIR}/neutron-dxvk-build.sh"
+VKD3D_BUILDER="${SCRIPT_DIR}/neutron-vkd3d-build.sh"
 
 # ── Build tuning toggles ──────────────────────────────────────────────────────
 NO_CCACHE=false           # --no-ccache: disable ccache entirely
@@ -190,7 +190,7 @@ ${C_B}Component selection:${C_R}
   --vkd3d-branch BRANCH Pin VKD3D-Proton to a specific tag
 
 ${C_B}Build options:${C_R}
-  --name NAME           Build name for install path (default: looni-proton-<ver>)
+  --name NAME           Build name for install path (default: looni-neutron-<ver>)
   --dest DIR            Root for build artefacts   (default: <script-dir>/buildz)
   --src-dir DIR         Root for git clones         (default: <script-dir>/src)
   --jobs N              Parallel make threads        (default: nproc = $(nproc))
@@ -207,7 +207,7 @@ ${C_B}Build options:${C_R}
   --reinstall-components  Skip Wine + skip building DXVK/VKD3D — just copy already-built
                         DLLs from src/*/build/ into the package and re-run the packager.
                         Use this after a Wine-only rebuild to restore DXVK/VKD3D.
-  --cfg PATH            Alternate proton-customization.cfg
+  --cfg PATH            Alternate neutron-customization.cfg
 
 ${C_B}General:${C_R}
   --list                Show all installed Proton builds
@@ -225,8 +225,8 @@ ${C_B}Examples:${C_R}
 
 ${C_B}Phase 2 note:${C_R}
   DXVK and VKD3D-Proton builds (--dxvk, --vkd3d) are wired into the pipeline
-  but are not yet compiled.  proton-dxvk-build.sh and proton-vkd3d-build.sh
-  contain the Phase 2 framework.  The packager (proton-package.sh) already
+  but are not yet compiled.  neutron-dxvk-build.sh and neutron-vkd3d-build.sh
+  contain the Phase 2 framework.  The packager (neutron-package.sh) already
   knows where to slot them in when they become available.
 
 ${C_B}Steam installation:${C_R}
@@ -268,7 +268,7 @@ while [ "$#" -gt 0 ]; do
         --reinstall-components) SKIP_WINE_BUILD=true; REINSTALL_COMPONENTS=true; shift ;;
         --kron4ek-redist)
             # Run just the compat redist function against an existing build dir
-            # Usage: ./proton-builder.sh --kron4ek-redist <BUILD_DIR> [PROTON_PKG_DIR]
+            # Usage: ./neutron-builder.sh --kron4ek-redist <BUILD_DIR> [NEUTRON_PKG_DIR]
             _KRON4EK_REDIST_BUILD="${2:-}"
             _KRON4EK_REDIST_PKG="${3:-}"
             shift; [ -n "$_KRON4EK_REDIST_BUILD" ] && shift || true
@@ -351,7 +351,7 @@ check_deps() {
 
     if [ "${#missing[@]}" -gt 0 ]; then
         err "Missing required tools: ${missing[*]}
-     Use the Containerfile.proton environment or install the above.
+     Use the Containerfile.neutron environment or install the above.
      See the README for distro-specific install commands."
     fi
     ok "All required tools present"
@@ -904,7 +904,7 @@ _kron4ek_tkg_install_redist_to_proton() {
         "$WINE_LIB/i386-windows"   "$WINE_LIB/i386-unix"
 
     local copied=0
-    for src_dir \
+    for src_dir in \
         "$BUILD/dst-lsteamclient-x86_64/lib/wine/x86_64-windows" \
         "$BUILD/dst-vrclient-x86_64/lib/wine/x86_64-windows" \
         "$BUILD/dst-steamexe-x86_64/lib/wine/x86_64-windows"; do
@@ -913,7 +913,7 @@ _kron4ek_tkg_install_redist_to_proton() {
             cp -f "$f" "$WINE_LIB/x86_64-windows/" && copied=$((copied+1))
         done
     done
-    for src_dir \
+    for src_dir in \
         "$BUILD/dst-lsteamclient-x86_64/lib/wine/x86_64-unix" \
         "$BUILD/dst-vrclient-x86_64/lib/wine/x86_64-unix"; do
         [ -d "$src_dir" ] || continue
@@ -921,7 +921,7 @@ _kron4ek_tkg_install_redist_to_proton() {
             cp -f "$f" "$WINE_LIB/x86_64-unix/" 2>/dev/null || true
         done
     done
-    for src_dir \
+    for src_dir in \
         "$BUILD/dst-lsteamclient-i386/lib/wine/i386-windows" \
         "$BUILD/dst-vrclient-i386/lib/wine/i386-windows"; do
         [ -d "$src_dir" ] || continue
@@ -1241,9 +1241,9 @@ pick_source() {
 # ══════════════════════════════════════════════════════════════════════════════
 #  pick_build_name  — interactive prompt for the tool name
 #
-#  Asks for a base name (e.g. "looni-proton" or "my-gaming-proton").
+#  Asks for a base name (e.g. "looni-neutron" or "my-gaming-neutron").
 #  The actual Wine version number is appended automatically after the build,
-#  so the final directory name will be e.g. "looni-proton-11.4.r0.gabcdef".
+#  so the final directory name will be e.g. "looni-neutron-11.4.r0.gabcdef".
 #  Skipped when --name was given on the command line or in non-interactive mode.
 # ══════════════════════════════════════════════════════════════════════════════
 pick_build_name() {
@@ -1254,8 +1254,8 @@ pick_build_name() {
     section "Tool name"
     printf "  Enter a base name for this Proton build.\n"
     printf "  The Wine version number will be appended automatically.\n"
-    printf "  ${C_DIM}Example: looni-proton  →  looni-proton-11.4.r0.gabcdef${C_R}\n\n"
-    printf "  ${C_B}Base name${C_R} [default: looni-proton]: "
+    printf "  ${C_DIM}Example: looni-neutron  →  looni-neutron-11.4.r0.gabcdef${C_R}\n\n"
+    printf "  ${C_B}Base name${C_R} [default: looni-neutron]: "
 
     local _input
     read -r _input
@@ -1267,7 +1267,7 @@ pick_build_name() {
             | sed 's/--*/-/g; s/^-//; s/-$//')"
         ok "Build name: ${BUILD_NAME}"
     else
-        BUILD_NAME="looni-proton"
+        BUILD_NAME="looni-neutron"
         ok "Build name: ${BUILD_NAME}  (default)"
     fi
 }
@@ -1419,17 +1419,17 @@ check_disk_space "$DEST_ROOT"
 # ── Resolve build directories ─────────────────────────────────────────────────
 # BUILD_NAME is either from --name, pick_build_name, or the source key default.
 # The Wine version number is appended to the final package dir after the build.
-[ -n "$BUILD_NAME" ] || BUILD_NAME="looni-proton"
+[ -n "$BUILD_NAME" ] || BUILD_NAME="looni-neutron"
 WINE_SOURCE_DIR="${SRC_ROOT}/${WINE_SOURCE_KEY}"
 BUILD_RUN_DIR="${DEST_ROOT}/build-run/${BUILD_NAME}"
 # Proton's Wine installs to <package>/files/ — not the package root
-PROTON_PACKAGE_DIR="${DEST_ROOT}/install/${BUILD_NAME}"
-WINE_INSTALL_PREFIX="${PROTON_PACKAGE_DIR}/files"
+NEUTRON_PACKAGE_DIR="${DEST_ROOT}/install/${BUILD_NAME}"
+WINE_INSTALL_PREFIX="${NEUTRON_PACKAGE_DIR}/files"
 BUILD_LOG="${BUILD_RUN_DIR}/build.log"
 
 msg2 "Wine source dir  : ${WINE_SOURCE_DIR}"
 msg2 "Build run dir    : ${BUILD_RUN_DIR}"
-msg2 "Proton package   : ${PROTON_PACKAGE_DIR}"
+msg2 "Proton package   : ${NEUTRON_PACKAGE_DIR}"
 msg2 "Wine prefix      : ${WINE_INSTALL_PREFIX}"
 
 mkdir -p "$DEST_ROOT" "$SRC_ROOT" "$BUILD_RUN_DIR" "$WINE_INSTALL_PREFIX"
@@ -1523,18 +1523,18 @@ else
     # ── Validate build scripts ──────────────────────────────────────────────
     [ -f "$BUILD_CORE" ] || \
         err "Build core script not found: $BUILD_CORE
-     Expected alongside proton-builder.sh as proton-build-core.sh"
+     Expected alongside neutron-builder.sh as neutron-build-core.sh"
     [ -x "$BUILD_CORE" ] || chmod +x "$BUILD_CORE"
 
     [ -f "$PACKAGER" ] || \
         err "Packager script not found: $PACKAGER
-     Expected alongside proton-builder.sh as proton-package.sh"
+     Expected alongside neutron-builder.sh as neutron-package.sh"
     [ -x "$PACKAGER" ] || chmod +x "$PACKAGER"
 
     # ── Load configuration ──────────────────────────────────────────────────
     [ -f "$CUSTOM_CFG" ] || \
         err "Configuration file not found: $CUSTOM_CFG
-     Copy and edit proton-customization.cfg — see the README for details."
+     Copy and edit neutron-customization.cfg — see the README for details."
     # shellcheck source=/dev/null
     source "$CUSTOM_CFG"
 
@@ -1542,7 +1542,7 @@ else
     export WINE_SOURCE="$WINE_SOURCE_DIR"
     export PREFIX="$WINE_INSTALL_PREFIX"
     export WINE_BUILD="${BUILD_NAME//-/_}"
-    export PROTON_SOURCE_KEY="$WINE_SOURCE_KEY"
+    export NEUTRON_SOURCE_KEY="$WINE_SOURCE_KEY"
     export JOBS
     export SKIP_32BIT
     export BUILD_RUN_DIR
@@ -1581,11 +1581,11 @@ else
             msg2 "proton-tkg build dir: $_tkg_build"
             _kron4ek_tkg_compat_redist "$_tkg_build" && \
                 _kron4ek_tkg_install_redist_to_proton "$_tkg_build" \
-                    "$PROTON_PACKAGE_DIR" || \
+                    "$NEUTRON_PACKAGE_DIR" || \
                 warn "Kron4ek TKG redist failed — lsteamclient/vrclient may be missing"
         else
             warn "Could not locate proton-tkg build dir — skipping redist"
-            warn "Run manually:  $0 --kron4ek-redist <BUILD_DIR> $PROTON_PACKAGE_DIR"
+            warn "Run manually:  $0 --kron4ek-redist <BUILD_DIR> $NEUTRON_PACKAGE_DIR"
         fi
     fi
 fi
@@ -1593,11 +1593,11 @@ fi
 # ══════════════════════════════════════════════════════════════════════════════
 #  PHASE 2 HOOK: Build DXVK
 #
-#  When proton-dxvk-build.sh is implemented, it will be called here.
+#  When neutron-dxvk-build.sh is implemented, it will be called here.
 #  It receives the DXVK source dir and the Proton package dir, compiles
 #  DXVK with Meson + MinGW, and places the .dll files under:
-#    ${PROTON_PACKAGE_DIR}/files/lib/wine/dxvk/   (32-bit)
-#    ${PROTON_PACKAGE_DIR}/files/lib64/wine/dxvk/  (64-bit)
+#    ${NEUTRON_PACKAGE_DIR}/files/lib/wine/dxvk/   (32-bit)
+#    ${NEUTRON_PACKAGE_DIR}/files/lib64/wine/dxvk/  (64-bit)
 # ══════════════════════════════════════════════════════════════════════════════
 section "DXVK build  [Phase 2]"
 if [ "${SKIP_DXVK:-false}" = "true" ]; then
@@ -1624,10 +1624,10 @@ elif [ "${REINSTALL_COMPONENTS:-false}" = "true" ]; then
     fi
 elif [ "${DXVK_SOURCE_KEY}" != "none" ]; then
     if [ -x "$DXVK_BUILDER" ]; then
-        export PROTON_PACKAGE_DIR
+        export NEUTRON_PACKAGE_DIR
         "$DXVK_BUILDER"
     else
-        warn "DXVK build (Phase 2) — proton-dxvk-build.sh not yet implemented"
+        warn "DXVK build (Phase 2) — neutron-dxvk-build.sh not yet implemented"
         warn "D3D9/D3D10/D3D11 games will fall back to WineD3D (software Vulkan wrapper)"
         warn "DXVK source is available at: ${DXVK_SOURCE_DIR:-${SRC_ROOT}/dxvk-${DXVK_SOURCE_KEY}}"
     fi
@@ -1638,10 +1638,10 @@ fi
 # ══════════════════════════════════════════════════════════════════════════════
 #  PHASE 2 HOOK: Build VKD3D-Proton
 #
-#  When proton-vkd3d-build.sh is implemented, it will be called here.
+#  When neutron-vkd3d-build.sh is implemented, it will be called here.
 #  It compiles VKD3D-Proton with Meson + MinGW and places d3d12.dll under:
-#    ${PROTON_PACKAGE_DIR}/files/lib/wine/vkd3d-proton/   (32-bit)
-#    ${PROTON_PACKAGE_DIR}/files/lib64/wine/vkd3d-proton/  (64-bit)
+#    ${NEUTRON_PACKAGE_DIR}/files/lib/wine/vkd3d-proton/   (32-bit)
+#    ${NEUTRON_PACKAGE_DIR}/files/lib64/wine/vkd3d-proton/  (64-bit)
 # ══════════════════════════════════════════════════════════════════════════════
 section "VKD3D-Proton build  [Phase 2]"
 if [ "${REINSTALL_COMPONENTS:-false}" = "true" ]; then
@@ -1666,10 +1666,10 @@ if [ "${REINSTALL_COMPONENTS:-false}" = "true" ]; then
     fi
 elif [ "${VKD3D_SOURCE_KEY}" != "none" ]; then
     if [ -x "$VKD3D_BUILDER" ]; then
-        export PROTON_PACKAGE_DIR
+        export NEUTRON_PACKAGE_DIR
         "$VKD3D_BUILDER"
     else
-        warn "VKD3D-Proton build (Phase 2) — proton-vkd3d-build.sh not yet implemented"
+        warn "VKD3D-Proton build (Phase 2) — neutron-vkd3d-build.sh not yet implemented"
         warn "DirectX 12 games will not work until Phase 2 is complete"
         warn "VKD3D-Proton source is available at: ${VKD3D_SOURCE_DIR:-${SRC_ROOT}/vkd3d-proton}"
     fi
@@ -1681,14 +1681,14 @@ fi
 #  PACKAGE  — generate Steam Proton layout
 # ══════════════════════════════════════════════════════════════════════════════
 section "Packaging Proton"
-export PROTON_PACKAGE_DIR WINE_INSTALL_PREFIX
+export NEUTRON_PACKAGE_DIR WINE_INSTALL_PREFIX
 export DXVK_SOURCE_KEY VKD3D_SOURCE_KEY
 export BUILD_NAME
 "$PACKAGER"
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Version rename  — append actual wine version string to the package dir
-#  Final name: <BUILD_NAME>-<version>  e.g. looni-proton-11.4.r0.gabcdef
+#  Final name: <BUILD_NAME>-<version>  e.g. looni-neutron-11.4.r0.gabcdef
 # ══════════════════════════════════════════════════════════════════════════════
 _wine_bin="${WINE_INSTALL_PREFIX}/bin/wine"
 if [ -x "$_wine_bin" ]; then
@@ -1699,9 +1699,9 @@ if [ -x "$_wine_bin" ]; then
         _clean_ver="$(printf '%s' "$_clean_ver" \
             | tr ' ' '-' | tr -d '()[]:'  | sed 's/--*/-/g; s/-$//')"
         _new_pkg="${DEST_ROOT}/install/${BUILD_NAME}-${_clean_ver}"
-        if [ "$PROTON_PACKAGE_DIR" != "$_new_pkg" ] && [ ! -e "$_new_pkg" ]; then
-            mv "$PROTON_PACKAGE_DIR" "$_new_pkg"
-            PROTON_PACKAGE_DIR="$_new_pkg"
+        if [ "$NEUTRON_PACKAGE_DIR" != "$_new_pkg" ] && [ ! -e "$_new_pkg" ]; then
+            mv "$NEUTRON_PACKAGE_DIR" "$_new_pkg"
+            NEUTRON_PACKAGE_DIR="$_new_pkg"
             WINE_INSTALL_PREFIX="${_new_pkg}/files"
             ok "Package: ${_new_pkg}"
         fi
@@ -1712,5 +1712,5 @@ fi
 _BUILD_END=$(date +%s)
 _ELAPSED=$(( _BUILD_END - _BUILD_START ))
 _ELAPSED_FMT="$(( _ELAPSED / 3600 ))h $(( (_ELAPSED % 3600) / 60 ))m $(( _ELAPSED % 60 ))s"
-print_summary "$PROTON_PACKAGE_DIR" "$_ELAPSED_FMT"
-_write_build_manifest "$PROTON_PACKAGE_DIR" "$_ELAPSED_FMT"
+print_summary "$NEUTRON_PACKAGE_DIR" "$_ELAPSED_FMT"
+_write_build_manifest "$NEUTRON_PACKAGE_DIR" "$_ELAPSED_FMT"
