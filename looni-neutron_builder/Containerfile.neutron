@@ -119,6 +119,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxml2-dev \
     libwayland-dev \
     wayland-protocols \
+    libegl-dev \
+    libxkbcommon-dev \
 
     # Vulkan (headers are bundled inside libvulkan-dev on Ubuntu 24.04)
     libvulkan-dev \
@@ -215,19 +217,24 @@ RUN mkdir -p /usr/include/x86_64-linux-gnu/linux \
     && cp /usr/include/linux/ntsync.h \
           /usr/include/x86_64-linux-gnu/linux/ntsync.h
 # This ensures files written to bind-mounted volumes are owned by you on the host.
-RUN groupadd --gid "${BUILD_GID}" "${BUILD_USER}" 2>/dev/null || \
-    groupmod  --gid "${BUILD_GID}" "$(getent group "${BUILD_GID}" | cut -d: -f1)" 2>/dev/null || true
-
-RUN useradd \
-        --uid "${BUILD_UID}" \
-        --gid "${BUILD_GID}" \
-        --shell /bin/bash \
-        --create-home \
-        "${BUILD_USER}" \
-    || usermod \
-        --uid "${BUILD_UID}" \
-        --gid "${BUILD_GID}" \
-        "${BUILD_USER}" 2>/dev/null || true
+# Ubuntu 24.04 ships with a default "ubuntu" user at UID 1000.  If our target
+# UID/GID is already taken by a different user, remove it first so useradd
+# can claim the UID cleanly.
+RUN _existing_user="$(getent passwd "${BUILD_UID}" 2>/dev/null | cut -d: -f1 || true)" \
+    && if [ -n "$_existing_user" ] && [ "$_existing_user" != "${BUILD_USER}" ]; then \
+           userdel -r "$_existing_user" 2>/dev/null || true; \
+       fi \
+    && _existing_group="$(getent group "${BUILD_GID}" 2>/dev/null | cut -d: -f1 || true)" \
+    && if [ -n "$_existing_group" ] && [ "$_existing_group" != "${BUILD_USER}" ]; then \
+           groupdel "$_existing_group" 2>/dev/null || true; \
+       fi \
+    && groupadd --gid "${BUILD_GID}" "${BUILD_USER}" 2>/dev/null || true \
+    && useradd \
+           --uid "${BUILD_UID}" \
+           --gid "${BUILD_GID}" \
+           --shell /bin/bash \
+           --create-home \
+           "${BUILD_USER}"
 
 # ── Create persistent ccache directory ─────────────────────────────────────
 RUN mkdir -p /home/"${BUILD_USER}"/.ccache \

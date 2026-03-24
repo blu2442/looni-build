@@ -61,7 +61,8 @@ NEUTRON_LIBS := \
     neutron-package.sh \
     spinner.sh \
     ntsync.h \
-    deps-neutron-tkg
+    deps-neutron-tkg \
+    Containerfile.neutron
 NEUTRON_CFG  := neutron-customization.cfg
 
 # wine_builder: launcher + engine scripts

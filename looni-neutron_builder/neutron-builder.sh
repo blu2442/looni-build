@@ -23,6 +23,40 @@ IFS=$'\n\t'
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  Path resolution — works from both the source tree and after `make install`
+#
+#  Source tree layout:
+#    looni-neutron_builder/
+#      neutron-builder.sh        ← this script
+#      neutron-build-core.sh     ← engine scripts alongside it
+#      neutron-customization.cfg ← config alongside it
+#      buildz/                   ← build output
+#      src/                      ← git clones
+#
+#  Installed layout (make install PREFIX=~/.local):
+#    ~/.local/bin/neutron-builder                   ← this script
+#    ~/.local/lib/looni-neutron_builder/*.sh        ← engine scripts
+#    ~/.config/looni-build/*.cfg                    ← config
+#    ~/.local/share/looni-neutron_builder/          ← build output + git clones
+# ══════════════════════════════════════════════════════════════════════════════
+if [ -f "${SCRIPT_DIR}/neutron-build-core.sh" ]; then
+    # Running directly from the source tree
+    _LIB_DIR="$SCRIPT_DIR"
+    _CFG_DIR="$SCRIPT_DIR"
+    _DATA_DIR="$SCRIPT_DIR"
+elif [ -f "${SCRIPT_DIR}/../lib/looni-neutron_builder/neutron-build-core.sh" ]; then
+    # Running from an installed bin/ directory
+    _LIB_DIR="$(cd "${SCRIPT_DIR}/../lib/looni-neutron_builder" && pwd)"
+    _CFG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/looni-build"
+    _DATA_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}/looni-neutron_builder"
+else
+    printf "ERR! Cannot locate engine scripts.\n" >&2
+    printf "     Expected alongside this script or in ../lib/looni-neutron_builder/\n" >&2
+    printf "     Run from the source tree, or install with: make install\n" >&2
+    exit 1
+fi
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  Colour & output helpers
 # ══════════════════════════════════════════════════════════════════════════════
 if [ -t 1 ] && command -v tput >/dev/null 2>&1 && tput colors >/dev/null 2>&1; then
@@ -135,8 +169,8 @@ declare -A VKD3D_SOURCE_DESC=(
 # ══════════════════════════════════════════════════════════════════════════════
 #  Defaults  —  all overridable by flags
 # ══════════════════════════════════════════════════════════════════════════════
-DEST_ROOT="${SCRIPT_DIR}/buildz"
-SRC_ROOT="${SCRIPT_DIR}/src"
+DEST_ROOT="${_DATA_DIR}/buildz"
+SRC_ROOT="${_DATA_DIR}/src"
 
 WINE_SOURCE_KEY=""
 WINE_SOURCE_BRANCH_ARG=""
@@ -154,12 +188,13 @@ RESUME=false
 SKIP_WINE_BUILD=false      # set by --dxvk-only / --vkd3d-only
 SKIP_DXVK=false           # set by --vkd3d-only
 REINSTALL_COMPONENTS=false # set by --reinstall-components
+CONTAINER_BUILD=""         # "" = ask interactively; "true" = container; "false" = native
 DRY_RUN=0
-CUSTOM_CFG="${SCRIPT_DIR}/neutron-customization.cfg"
-BUILD_CORE="${SCRIPT_DIR}/neutron-build-core.sh"
-PACKAGER="${SCRIPT_DIR}/neutron-package.sh"
-DXVK_BUILDER="${SCRIPT_DIR}/neutron-dxvk-build.sh"
-VKD3D_BUILDER="${SCRIPT_DIR}/neutron-vkd3d-build.sh"
+CUSTOM_CFG="${_CFG_DIR}/neutron-customization.cfg"
+BUILD_CORE="${_LIB_DIR}/neutron-build-core.sh"
+PACKAGER="${_LIB_DIR}/neutron-package.sh"
+DXVK_BUILDER="${_LIB_DIR}/neutron-dxvk-build.sh"
+VKD3D_BUILDER="${_LIB_DIR}/neutron-vkd3d-build.sh"
 
 # ── Build tuning toggles ──────────────────────────────────────────────────────
 NO_CCACHE=false           # --no-ccache: disable ccache entirely
@@ -188,6 +223,11 @@ ${C_B}Component selection:${C_R}
                         [Phase 2 — see note below]
   --dxvk-branch BRANCH  Pin DXVK to a specific tag
   --vkd3d-branch BRANCH Pin VKD3D-Proton to a specific tag
+
+${C_B}Build method:${C_R}
+  --container           Build inside a Podman/Docker container (no local deps needed)
+  --no-container        Build natively on the host (requires all build dependencies)
+                        If neither is given, you will be prompted interactively.
 
 ${C_B}Build options:${C_R}
   --name NAME           Build name for install path (default: looni-neutron-<ver>)
@@ -266,6 +306,8 @@ while [ "$#" -gt 0 ]; do
         --dxvk-only)    SKIP_WINE_BUILD=true; DXVK_SOURCE_KEY="${DXVK_SOURCE_KEY:-dxvk}"; shift ;;
         --vkd3d-only)   SKIP_WINE_BUILD=true; SKIP_DXVK=true; VKD3D_SOURCE_KEY="${VKD3D_SOURCE_KEY:-vkd3d-proton}"; shift ;;
         --reinstall-components) SKIP_WINE_BUILD=true; REINSTALL_COMPONENTS=true; shift ;;
+        --container)    CONTAINER_BUILD=true;        shift   ;;
+        --no-container) CONTAINER_BUILD=false;       shift   ;;
         --kron4ek-redist)
             # Run just the compat redist function against an existing build dir
             # Usage: ./neutron-builder.sh --kron4ek-redist <BUILD_DIR> [NEUTRON_PKG_DIR]
@@ -318,6 +360,7 @@ check_deps() {
     local -a missing=()
     local -a tools=(
         git make autoconf automake pkg-config
+        flex bison
         gcc g++
         i686-linux-gnu-gcc
         x86_64-w64-mingw32-gcc
@@ -378,6 +421,207 @@ check_disk_space() {
     else
         ok "Disk space: ~${avail_gb} GB free"
     fi
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Container build support
+#
+#  pick_build_method  — interactively ask native vs container (if not set via CLI)
+#  _detect_container_engine — find podman or docker
+#  _run_container_build — build image if needed, re-exec inside the container
+# ══════════════════════════════════════════════════════════════════════════════
+_detect_container_engine() {
+    if command -v podman >/dev/null 2>&1; then
+        printf 'podman'
+    elif command -v docker >/dev/null 2>&1; then
+        printf 'docker'
+    else
+        printf ''
+    fi
+}
+
+pick_build_method() {
+    [ -e /dev/tty ] || return 0
+    # Already set by --container / --native
+    [ -n "$CONTAINER_BUILD" ] && return 0
+
+    local _engine
+    _engine="$(_detect_container_engine)"
+
+    section "Build method"
+    printf "  ${C_B}1) Native${C_R}        — build directly on this machine\n"
+    printf "                     ${C_DIM}Requires all build dependencies to be installed.${C_R}\n"
+    printf "  ${C_B}2) Container${C_R}     — build inside a Podman/Docker container\n"
+    printf "                     ${C_DIM}No local deps needed; image is ~5–6 GB (built once).${C_R}\n"
+    if [ -z "$_engine" ]; then
+        printf "                     ${C_YLW}(podman/docker not found — install one first)${C_R}\n"
+    else
+        printf "                     ${C_DIM}Detected: ${_engine}${C_R}\n"
+    fi
+    printf "\n"
+    printf "  ${C_CYN}Build method [1=native, 2=container]:${C_R} "
+    local _pick; read -r _pick </dev/tty
+    case "$_pick" in
+        2)
+            if [ -z "$_engine" ]; then
+                err "No container engine found. Install podman or docker first.
+     Podman (recommended): sudo apt install podman
+     Docker: https://docs.docker.com/engine/install/"
+            fi
+            CONTAINER_BUILD=true
+            ok "Build method: container (${_engine})"
+            ;;
+        *)
+            CONTAINER_BUILD=false
+            ok "Build method: native"
+            ;;
+    esac
+}
+
+_run_container_build() {
+    local engine
+    engine="$(_detect_container_engine)"
+    [ -n "$engine" ] || err "No container engine found (podman or docker required)."
+
+    local image_name="looni-neutron_builder"
+    local containerfile="${_LIB_DIR}/Containerfile.neutron"
+
+    # If running from the source tree, Containerfile is alongside us.
+    # If installed, it's in the lib dir.
+    if [ ! -f "$containerfile" ]; then
+        containerfile="${SCRIPT_DIR}/Containerfile.neutron"
+    fi
+    [ -f "$containerfile" ] || \
+        err "Containerfile not found: $containerfile
+     Expected in the source tree or lib directory."
+
+    # ntsync.h must be in the build context alongside the Containerfile
+    local _build_context
+    _build_context="$(dirname "$containerfile")"
+
+    # ── Build or rebuild the container image ──────────────────────────────
+    # The image bakes in UID/GID/username at build time.  If it was built on
+    # a different machine (or by a different user), the baked-in UID won't
+    # match the current user and podman/docker will fail with "no matching
+    # entries in the password file".  Detect this and auto-rebuild.
+    local _need_build=false
+    if ! "$engine" image exists "$image_name" 2>/dev/null; then
+        _need_build=true
+        msg "Image not found — will build."
+    else
+        # Check whether the image's baked-in UID matches ours
+        local _image_uid
+        _image_uid=$("$engine" run --rm "$image_name" id -u 2>/dev/null || true)
+        if [ "$_image_uid" != "$(id -u)" ]; then
+            warn "Image was built for UID ${_image_uid:-?} but you are UID $(id -u)"
+            msg "Rebuilding image for current user..."
+            "$engine" rmi -f "$image_name" >/dev/null 2>&1 || true
+            _need_build=true
+        else
+            ok "Container image found: ${image_name}  (UID matches)"
+        fi
+    fi
+
+    if [ "$_need_build" = "true" ]; then
+        section "Building container image"
+        msg "Building ${image_name} (this takes a few minutes)..."
+        msg2 "Containerfile: $containerfile"
+        msg2 "BUILD_USER=$(whoami)  BUILD_UID=$(id -u)  BUILD_GID=$(id -g)"
+
+        run "$engine" build \
+            --build-arg "BUILD_USER=$(whoami)" \
+            --build-arg "BUILD_UID=$(id -u)" \
+            --build-arg "BUILD_GID=$(id -g)" \
+            -t "$image_name" \
+            -f "$containerfile" \
+            "$_build_context"
+
+        ok "Container image built: ${image_name}"
+    fi
+
+    # ── Volume flags ─────────────────────────────────────────────────────
+    # :z is needed for SELinux relabelling (harmless on non-SELinux systems)
+    local vol_flag=":z"
+
+    # ── Build the command to run inside the container ────────────────────
+    # Re-invoke neutron-builder.sh with --no-container (skip the method
+    # picker inside the container) plus all the user's original arguments.
+    local -a inner_args=( "--no-container" )
+
+    [ -n "$WINE_SOURCE_KEY" ]        && inner_args+=( "--source" "$WINE_SOURCE_KEY" )
+    [ -n "$WINE_SOURCE_BRANCH_ARG" ] && inner_args+=( "--branch" "$WINE_SOURCE_BRANCH_ARG" )
+    [ -n "$BUILD_NAME" ]             && inner_args+=( "--name" "$BUILD_NAME" )
+    [ "$DXVK_SOURCE_KEY" != "dxvk" ] && inner_args+=( "--dxvk" "$DXVK_SOURCE_KEY" )
+    [ "$VKD3D_SOURCE_KEY" != "vkd3d-proton" ] && inner_args+=( "--vkd3d" "$VKD3D_SOURCE_KEY" )
+    [ -n "$DXVK_BRANCH_ARG" ]        && inner_args+=( "--dxvk-branch" "$DXVK_BRANCH_ARG" )
+    [ -n "$VKD3D_BRANCH_ARG" ]       && inner_args+=( "--vkd3d-branch" "$VKD3D_BRANCH_ARG" )
+    [ "$JOBS" != "$(nproc)" ]        && inner_args+=( "--jobs" "$JOBS" )
+    [ "$SKIP_32BIT" = "true" ]       && inner_args+=( "--skip-32" )
+    [ "$NO_CCACHE" = "true" ]        && inner_args+=( "--no-ccache" )
+    [ "$KEEP_SYMBOLS" = "true" ]     && inner_args+=( "--keep-symbols" )
+    [ "$BUILD_TYPE" != "release" ]   && inner_args+=( "--build-type" "$BUILD_TYPE" )
+    [ "$NATIVE_MARCH" = "true" ]     && inner_args+=( "--native" )
+    [ "$LTO" = "true" ]              && inner_args+=( "--lto" )
+    [ "$RESUME" = "true" ]           && inner_args+=( "--resume" )
+    [ "$NO_PULL" = "true" ]          && inner_args+=( "--no-pull" )
+    [ "$DRY_RUN" -eq 1 ]            && inner_args+=( "--dry-run" )
+
+    # ── Resolve mount paths ──────────────────────────────────────────────
+    # Two bind mounts:
+    #   1. _LIB_DIR  → WORKDIR  (scripts: neutron-builder.sh + helpers)
+    #   2. _DATA_DIR → /data    (persistent: buildz/ + src/)
+    # We pass --dest and --src-dir so the build writes to /data inside the
+    # container, which maps back to _DATA_DIR on the host.
+    local container_home="/home/$(whoami)/looni-neutron_builder"
+    local container_data="/data"
+    mkdir -p "$_DATA_DIR"
+
+    inner_args+=( "--dest" "${container_data}/buildz" )
+    inner_args+=( "--src-dir" "${container_data}/src" )
+
+    section "Launching container build"
+    # ── Engine-specific flags ────────────────────────────────────────────
+    # Podman rootless needs --userns=keep-id so the host UID is mapped
+    # into the container with a proper /etc/passwd entry.
+    local -a engine_flags=()
+    if [ "$engine" = "podman" ]; then
+        engine_flags+=( "--userns=keep-id" )
+    else
+        # Docker: run as the current user so file ownership matches the host
+        engine_flags+=( "--user" "$(id -u):$(id -g)" )
+    fi
+
+    msg2 "Engine     : ${engine}"
+    msg2 "Image      : ${image_name}"
+    msg2 "Scripts    : ${_LIB_DIR} → ${container_home}"
+    msg2 "Config     : ${CUSTOM_CFG}"
+    msg2 "Data dir   : ${_DATA_DIR} → ${container_data}"
+    msg2 "Inner args : $(printf '%s ' "${inner_args[@]}")"
+
+    # Mount _LIB_DIR as the WORKDIR (helper scripts), then overlay the main
+    # script on top.  In the installed layout the main script lives in bin/
+    # (as "neutron-builder", no .sh) while helpers live in lib/.  The file
+    # bind mount adds it into the directory mount so both are visible.
+    local _self
+    _self="$(readlink -f "${BASH_SOURCE[0]}")"
+
+    # ── Config file mount ──────────────────────────────────────────────
+    # Inside the container the source-tree layout detection sets _CFG_DIR
+    # to the WORKDIR — overlay the host cfg file so it's found there.
+    local -a cfg_mount=()
+    if [ -f "$CUSTOM_CFG" ]; then
+        cfg_mount=( -v "${CUSTOM_CFG}:${container_home}/neutron-customization.cfg:ro,${vol_flag#:}" )
+    fi
+
+    exec "$engine" run --rm -it \
+        "${engine_flags[@]}" \
+        -v "${_LIB_DIR}:${container_home}${vol_flag}" \
+        -v "${_self}:${container_home}/neutron-builder.sh:ro,${vol_flag#:}" \
+        "${cfg_mount[@]}" \
+        -v "${_DATA_DIR}:${container_data}${vol_flag}" \
+        -v "looni-neutron_builder-ccache:/home/$(whoami)/.ccache${vol_flag}" \
+        "$image_name" \
+        bash neutron-builder.sh "${inner_args[@]}"
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -570,11 +814,23 @@ fix_opencl_headers() {
 
     msg2 "Creating OpenCL compat symlink (macOS path expected by configure)..."
     if [ "$DRY_RUN" -eq 0 ]; then
-        mkdir -p /usr/include/OpenCL 2>/dev/null || \
-            sudo mkdir -p /usr/include/OpenCL
-        ln -sf "$linux_h" "$compat_h" 2>/dev/null || \
-            sudo ln -sf "$linux_h" "$compat_h" || \
-            warn "Could not create $compat_h — OpenCL may be disabled"
+        if ! mkdir -p /usr/include/OpenCL 2>/dev/null; then
+            if command -v sudo >/dev/null 2>&1; then
+                sudo mkdir -p /usr/include/OpenCL
+            else
+                warn "Could not create /usr/include/OpenCL — OpenCL may be disabled"
+                return
+            fi
+        fi
+        if ! ln -sf "$linux_h" "$compat_h" 2>/dev/null; then
+            if command -v sudo >/dev/null 2>&1; then
+                sudo ln -sf "$linux_h" "$compat_h" || \
+                    { warn "Could not create $compat_h — OpenCL may be disabled"; return; }
+            else
+                warn "Could not create $compat_h — OpenCL may be disabled"
+                return
+            fi
+        fi
         ok "OpenCL compat symlink created"
     else
         dim "  [dry-run] ln -sf $linux_h $compat_h"
@@ -1313,7 +1569,18 @@ if [ -z "${VKD3D_SOURCE_URL[$VKD3D_SOURCE_KEY]+x}" ]; then
  Valid options: vkd3d-proton | none"
 fi
 
-# ── Dependency check ──────────────────────────────────────────────────────────
+# ── Build method (native vs container) ────────────────────────────────────────
+pick_build_method
+
+# If container build was chosen, hand off to the container now.
+# _run_container_build execs into the container — this script does not continue.
+if [ "$CONTAINER_BUILD" = "true" ]; then
+    _run_container_build
+    # exec replaces this process — if we reach here, something went wrong
+    err "Container build failed to launch."
+fi
+
+# ── Dependency check (native builds only) ─────────────────────────────────────
 check_deps
 
 # ── Build name ────────────────────────────────────────────────────────────────
@@ -1321,19 +1588,43 @@ pick_build_name
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  pick_build_options  — interactive wizard for build tuning
+#
+#  Opens with a single yes/no: "change build options?"
+#  Answering N (or Enter) skips all questions and keeps defaults — no more
+#  answering 6 questions just to accept everything.
+#  Skipped entirely when --jobs / --no-ccache / etc. were given on the CLI,
+#  or in non-interactive mode.
 # ══════════════════════════════════════════════════════════════════════════════
 pick_build_options() {
-    [ -t 0 ] || return 0
+    [ -e /dev/tty ] || return 0
+
+    # If any tuning flag was set explicitly on the CLI, skip the wizard —
+    # the user already knows what they want.
+    if [ "$NO_CCACHE" = "true" ] || [ "$KEEP_SYMBOLS" = "true" ] || \
+       [ "$BUILD_TYPE" != "release" ] || [ "$NATIVE_MARCH" = "true" ] || \
+       [ "$LTO" = "true" ]; then
+        return 0
+    fi
+
+    local _cpu_count; _cpu_count=$(nproc)
 
     section "Build options"
+    printf "  Current defaults:  jobs=${C_B}${JOBS}${C_R}  32-bit=${C_B}$([ "$SKIP_32BIT" = true ] && echo skip || echo yes)${C_R}"
+    printf "  build=${C_B}release${C_R}  ccache=${C_B}$(command -v ccache >/dev/null 2>&1 && echo on || echo n/a)${C_R}  symbols=${C_B}stripped${C_R}  native=${C_B}no${C_R}  lto=${C_B}no${C_R}\n\n"
+    printf "  ${C_CYN}Change build options?${C_R}  [y/N]: "
+    local _change; read -r _change </dev/tty
+    case "$_change" in
+        [yY]*) ;;
+        *) ok "Using defaults"; return 0 ;;
+    esac
+    printf "\n"
 
     # Jobs
-    local _cpu_count; _cpu_count=$(nproc)
     printf "  ${C_CYN}Jobs${C_R} (parallel compile threads)\n"
     printf "  Your CPU has ${C_B}${_cpu_count}${C_R} threads.\n"
     printf "  ${C_DIM}Suggestions: all=${_cpu_count}  leave-one-free=$(( _cpu_count - 1 ))  half=$(( _cpu_count / 2 ))${C_R}\n"
     printf "  Jobs [default: ${_cpu_count}]: "
-    local _j; read -r _j
+    local _j; read -r _j </dev/tty
     if [ -n "$_j" ] && [ "$_j" -gt 0 ] 2>/dev/null; then
         JOBS="$_j"; ok "Jobs: ${JOBS}"
     else
@@ -1344,7 +1635,7 @@ pick_build_options() {
     # 32-bit
     printf "  ${C_CYN}32-bit build${C_R}  Needed for 32-bit games.\n"
     printf "  Skip 32-bit? [y/N]: "
-    local _s32; read -r _s32
+    local _s32; read -r _s32 </dev/tty
     case "$_s32" in
         [yY]*) SKIP_32BIT=true;  ok "32-bit: skipped" ;;
         *)     SKIP_32BIT=false; ok "32-bit: enabled" ;;
@@ -1357,7 +1648,7 @@ pick_build_options() {
     printf "    ${C_B}debugoptimized${C_R}  — optimised + debug symbols\n"
     printf "    ${C_B}debug${C_R}           — no optimisation, full symbols\n"
     printf "  Build type [release]: "
-    local _bt; read -r _bt
+    local _bt; read -r _bt </dev/tty
     case "$_bt" in
         debug|debugoptimized) BUILD_TYPE="$_bt"; ok "Build type: ${BUILD_TYPE}" ;;
         *) BUILD_TYPE="release"; ok "Build type: release  (default)" ;;
@@ -1367,7 +1658,7 @@ pick_build_options() {
     # ccache
     if command -v ccache >/dev/null 2>&1; then
         printf "  ${C_CYN}ccache${C_R}  Disable ccache? [y/N]: "
-        local _cc; read -r _cc
+        local _cc; read -r _cc </dev/tty
         case "$_cc" in
             [yY]*) NO_CCACHE=true;  ok "ccache: disabled" ;;
             *)     NO_CCACHE=false; ok "ccache: enabled" ;;
@@ -1377,7 +1668,7 @@ pick_build_options() {
 
     # Symbols
     printf "  ${C_CYN}Debug symbols${C_R}  Keep symbols? (larger binaries)  [y/N]: "
-    local _ks; read -r _ks
+    local _ks; read -r _ks </dev/tty
     case "$_ks" in
         [yY]*) KEEP_SYMBOLS=true;  ok "Symbols: kept" ;;
         *)     KEEP_SYMBOLS=false; ok "Symbols: stripped  (default)" ;;
@@ -1386,7 +1677,7 @@ pick_build_options() {
 
     # -march=native
     printf "  ${C_CYN}-march=native${C_R}  Optimise for this CPU only? (non-portable)  [y/N]: "
-    local _nm; read -r _nm
+    local _nm; read -r _nm </dev/tty
     case "$_nm" in
         [yY]*) NATIVE_MARCH=true;  ok "-march=native: enabled" ;;
         *)     NATIVE_MARCH=false; ok "-march=native: disabled  (default)" ;;
@@ -1395,7 +1686,7 @@ pick_build_options() {
 
     # LTO
     printf "  ${C_CYN}LTO${C_R}  Link-time optimisation? (slow link, smaller binary)  [y/N]: "
-    local _lto; read -r _lto
+    local _lto; read -r _lto </dev/tty
     case "$_lto" in
         [yY]*) LTO=true;  ok "LTO: enabled" ;;
         *)     LTO=false; ok "LTO: disabled  (default)" ;;

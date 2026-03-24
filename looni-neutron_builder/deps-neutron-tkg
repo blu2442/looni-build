@@ -42,7 +42,7 @@ _install_debuntu_deps() {
         libx11-dev libxext-dev libxrandr-dev libxinerama-dev
         libxcomposite-dev libxcursor-dev libxi-dev libxfixes-dev
         libxrender-dev libxt-dev libxmu-dev
-        libwayland-dev wayland-protocols
+        libwayland-dev wayland-protocols libxkbcommon-dev
         libvulkan-dev vulkan-utility-libraries-dev
 
         # ── Fonts ─────────────────────────────────────────────────────────────

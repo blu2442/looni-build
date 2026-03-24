@@ -96,8 +96,25 @@ _launch() {
         read -r
         return
     fi
-    # Run (not exec) so the process returns here when the tool exits
-    bash "$tool_bin" || true
+    # Clear the terminal before each tool so its own banner starts clean
+    clear
+    # Ignore SIGINT in this (parent) shell while the child runs.
+    # Ctrl+C will still kill the child tool, but looni-build stays alive
+    # and loops back to the menu instead of exiting entirely.
+    # Also disable errexit — a non-zero child exit (e.g. code 130 from
+    # Ctrl+C, or user pressing Esc) must not propagate to this launcher.
+    trap '' INT
+    set +e
+    bash "$tool_bin"
+    local _exit=$?
+    set -e
+    trap - INT   # restore default SIGINT handling
+    if [ "$_exit" -ne 0 ] && [ "$_exit" -ne 130 ]; then
+        # 130 = killed by SIGINT (Ctrl+C) — no need to print an error for that
+        printf "\n${C_MAG}  ✖  %s exited with code %d.${C_R}\n" "$key" "$_exit"
+        printf "  ${C_DIM}Press Enter to return to the menu...${C_R}"
+        read -r _pause 2>/dev/null || true
+    fi
 }
 
 _build_menu_input() {
