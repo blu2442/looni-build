@@ -187,11 +187,18 @@ _make_wrapper() {
     real_path="$( command -v "${real_bin}" )" || \
         err "MinGW compiler not found: ${real_bin}
      Install: sudo apt install gcc-mingw-w64 g++-mingw-w64"
+    # Derive the MinGW sysroot include path from the compiler triple
+    # (x86_64-w64-mingw32-gcc → /usr/x86_64-w64-mingw32/include).
+    # This must come FIRST so MinGW's stdint.h/corecrt.h win over
+    # Linux system headers (/usr/include) that meson may inject via
+    # pkg-config, preventing uintptr_t redefinition conflicts.
+    local _triple="${real_bin%-*}"   # strip trailing -gcc or -g++
+    local _mingw_inc="/usr/${_triple}/include"
     local wrapper="${WRAPPER_DIR}/${real_bin}"
-    printf '#!/bin/sh\nexec "%s" -I"%s" -I"%s" "$@"\n' \
-        "$real_path" "$VULKAN_INCLUDE_ROOT" "$SPIRV_INCLUDE_ROOT" > "$wrapper"
+    printf '#!/bin/sh\nexec "%s" -I"%s" -I"%s" -I"%s" "$@"\n' \
+        "$real_path" "$_mingw_inc" "$VULKAN_INCLUDE_ROOT" "$SPIRV_INCLUDE_ROOT" > "$wrapper"
     chmod +x "$wrapper"
-    ok "Wrapper: ${real_bin}"
+    ok "Wrapper: ${real_bin}  (sysroot: ${_mingw_inc})"
 }
 
 _make_wrapper "x86_64-w64-mingw32-gcc"
