@@ -726,12 +726,19 @@ pick_wine_version() {
             return 0
         fi
     else
-        # Standard tags: wine-X.Y
+        # Tag pattern varies by source:
+        #   kron4ek-tkg — bare version numbers: 9.22, 9.21 …
+        #   others      — wine-X.Y prefix: wine-10.0, wine-9.22 …
+        local _tag_pattern
+        case "$key" in
+            kron4ek-tkg) _tag_pattern='^[0-9]+\.[0-9]' ;;
+            *)           _tag_pattern='^wine-[0-9]+\.[0-9]' ;;
+        esac
         if ! raw_refs=$(
                 git ls-remote --tags --refs "$url" 2>/dev/null \
                 | awk '{print $2}' \
                 | sed 's|refs/tags/||' \
-                | grep -E '^wine-[0-9]+\.[0-9]' \
+                | grep -E "$_tag_pattern" \
                 | grep -v -- '-rc' \
                 | sort -Vr
             ); then
@@ -760,7 +767,7 @@ pick_wine_version() {
               for v in "${versions[@]}"; do
                   case "$key" in
                       kron4ek-tkg)
-                          ver="${v#wine-}"
+                          ver="$v"
                           label="Kron4ek TKG Wine ${ver}  (tag: ${v})"
                           ;;
                       *)
@@ -1781,9 +1788,12 @@ fetch_source \
 [ -d "$WINE_SOURCE_DIR" ] || \
     err "Wine source directory not found after fetch: $WINE_SOURCE_DIR"
 
-[ -f "${WINE_SOURCE_DIR}/configure.ac" ] || \
-    err "configure.ac not found in: $WINE_SOURCE_DIR
+# kron4ek-tkg is a build system repo, not a Wine source tree — no configure.ac
+if [ "$WINE_SOURCE_KEY" != "kron4ek-tkg" ]; then
+    [ -f "${WINE_SOURCE_DIR}/configure.ac" ] || \
+        err "configure.ac not found in: $WINE_SOURCE_DIR
      This does not look like a Wine source tree."
+fi
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  _download_dxvk_release  — install pre-built DXVK DLLs from GitHub releases
