@@ -267,8 +267,10 @@ _build_dxvk_arch() {
 
     # libdisplay-info is a Linux-native library (EDID/HDR detection) that does
     # not cross-compile to Windows — it pulls in Linux system headers that
-    # conflict with MinGW headers.  DXVK marks it required:false, so removing
-    # the subproject dir causes meson to skip it cleanly.
+    # conflict with MinGW.  Patch meson.build to make it required:false, then
+    # remove the subproject dir so meson skips it entirely.
+    sed -i "s/dependency(\s*'libdisplay-info'/dependency('libdisplay-info', required: false,/" \
+        "${DXVK_SOURCE_DIR}/meson.build" 2>/dev/null || true
     rm -rf "${DXVK_SOURCE_DIR}/subprojects/libdisplay-info"
 
     meson setup \
