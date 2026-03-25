@@ -273,7 +273,7 @@ _build_dxvk_arch() {
     local _stub="${DXVK_SOURCE_DIR}/subprojects/libdisplay-info"
     rm -rf "$_stub"
     mkdir -p "$_stub"
-    printf "project('libdisplay-info', 'c')\ndi_dep = declare_dependency()\n" \
+    printf "project('libdisplay-info', 'c', version: '0.1.0')\ndi_dep = declare_dependency()\n" \
         > "${_stub}/meson.build"
 
     meson setup \
