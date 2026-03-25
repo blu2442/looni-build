@@ -265,13 +265,16 @@ _build_dxvk_arch() {
     fi
     mkdir -p "$(dirname "$build_dir")"
 
-    # libdisplay-info is a Linux-native library (EDID/HDR detection) that does
-    # not cross-compile to Windows — it pulls in Linux system headers that
-    # conflict with MinGW.  Patch meson.build to make it required:false, then
-    # remove the subproject dir so meson skips it entirely.
-    sed -i "s/dependency(\s*'libdisplay-info'/dependency('libdisplay-info', required: false,/" \
-        "${DXVK_SOURCE_DIR}/meson.build" 2>/dev/null || true
-    rm -rf "${DXVK_SOURCE_DIR}/subprojects/libdisplay-info"
+    # libdisplay-info is a Linux-native EDID/HDR library that can't cross-compile
+    # to Windows.  DXVK's meson.build has fallback:['libdisplay-info','di_dep'],
+    # and meson errors if the fallback subproject dir is absent even with
+    # required:false.  Solution: inject a minimal stub subproject that satisfies
+    # the fallback and exports an empty dependency — DXVK builds fine without it.
+    local _stub="${DXVK_SOURCE_DIR}/subprojects/libdisplay-info"
+    rm -rf "$_stub"
+    mkdir -p "$_stub"
+    printf "project('libdisplay-info', 'c')\ndi_dep = declare_dependency()\n" \
+        > "${_stub}/meson.build"
 
     meson setup \
         --cross-file="$cross_file" \
