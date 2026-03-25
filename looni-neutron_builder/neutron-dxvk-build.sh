@@ -273,15 +273,67 @@ _build_dxvk_arch() {
     mkdir -p "$(dirname "$build_dir")"
 
     # libdisplay-info is a Linux-native EDID/HDR library that can't cross-compile
-    # to Windows.  DXVK's meson.build has fallback:['libdisplay-info','di_dep'],
-    # and meson errors if the fallback subproject dir is absent even with
-    # required:false.  Solution: inject a minimal stub subproject that satisfies
-    # the fallback and exports an empty dependency — DXVK builds fine without it.
+    # to Windows.  Strategy:
+    #  1. Inject a stub subproject with a matching version so meson's fallback
+    #     resolves without errors.
+    #  2. Create stub C headers (info.h/edid.h/cta.h) so wsi_edid.cpp compiles —
+    #     the functions return null/zero so HDR EDID detection is a no-op on Windows.
     local _stub="${DXVK_SOURCE_DIR}/subprojects/libdisplay-info"
     rm -rf "$_stub"
-    mkdir -p "$_stub"
-    printf "project('libdisplay-info', 'c', version: '0.1.0')\ndi_dep = declare_dependency()\n" \
+    mkdir -p "${_stub}/libdisplay-info"
+    printf "project('libdisplay-info', 'c', version: '0.1.0')\n" \
         > "${_stub}/meson.build"
+    printf "di_dep = declare_dependency(include_directories: include_directories('.'))\n" \
+        >> "${_stub}/meson.build"
+    # Stub headers — empty structs + no-op function declarations so wsi_edid.cpp compiles
+    cat > "${_stub}/libdisplay-info/info.h"  << 'STUBEOF'
+#pragma once
+#ifdef __cplusplus
+extern "C" {
+#endif
+struct di_info;
+static inline struct di_info *di_info_parse_edid(const void *data, size_t size) { (void)data; (void)size; return 0; }
+static inline void di_info_destroy(struct di_info *info) { (void)info; }
+struct di_info_failure_msgs { const char *failure; const char *sanitized; };
+static inline const struct di_info_failure_msgs *di_info_get_failure_msgs(const struct di_info *info) { (void)info; return 0; }
+static inline const struct di_edid *di_info_get_edid(const struct di_info *info) { (void)info; return 0; }
+#ifdef __cplusplus
+}
+#endif
+STUBEOF
+    cat > "${_stub}/libdisplay-info/edid.h" << 'STUBEOF'
+#pragma once
+#ifdef __cplusplus
+extern "C" {
+#endif
+struct di_edid;
+struct di_edid_byte_dtd;
+struct di_edid_color_encoding_formats { int rgb444; };
+static inline const struct di_edid_byte_dtd *const *di_edid_get_byte_dtds(const struct di_edid *edid) { (void)edid; return 0; }
+static inline struct di_edid_color_encoding_formats di_edid_byte_dtd_get_color_encoding_formats(const struct di_edid_byte_dtd *dtd) { (void)dtd; struct di_edid_color_encoding_formats f = {0}; return f; }
+#ifdef __cplusplus
+}
+#endif
+STUBEOF
+    cat > "${_stub}/libdisplay-info/cta.h" << 'STUBEOF'
+#pragma once
+#ifdef __cplusplus
+extern "C" {
+#endif
+struct di_cta_colorimetry_block { int bt2020_rgb; int bt2020_ycc; int bt2020_cycc; };
+struct di_cta_hdr_static_metadata_block { int descriptors; };
+struct di_cta_hdr_static_metadata_block_descriptor { int type; };
+struct di_cta_svd_primaries { float primary[3][2]; float white_point[2]; };
+struct di_edid_cta;
+static inline const struct di_edid_cta *di_edid_get_cta(const struct di_edid *edid) { (void)edid; return 0; }
+static inline const struct di_cta_colorimetry_block *di_cta_get_colorimetry_block(const struct di_edid_cta *cta) { (void)cta; return 0; }
+static inline const struct di_cta_hdr_static_metadata_block *di_cta_get_hdr_static_metadata_block(const struct di_edid_cta *cta) { (void)cta; return 0; }
+static inline const struct di_cta_hdr_static_metadata_block_descriptor *const *di_cta_hdr_static_metadata_block_get_descriptors(const struct di_cta_hdr_static_metadata_block *b) { (void)b; return 0; }
+static inline const struct di_cta_svd_primaries *di_cta_get_svd_primaries(const struct di_edid_cta *cta) { (void)cta; return 0; }
+#ifdef __cplusplus
+}
+#endif
+STUBEOF
 
     meson setup \
         --cross-file="$cross_file" \
