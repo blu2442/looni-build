@@ -740,6 +740,11 @@ pick_wine_version() {
                 | sed 's|refs/tags/||' \
                 | grep -E "$_tag_pattern" \
                 | grep -v -- '-rc' \
+                | { case "$key" in
+                        # Only show 10.x+ tags — older 9.x tags lack configure.ac
+                        kron4ek-tkg) awk -F. '$1 >= 10' ;;
+                        *)           cat ;;
+                    esac; } \
                 | sort -Vr
             ); then
             warn "Could not fetch tag list — using default branch."
@@ -798,18 +803,31 @@ pick_wine_version() {
         return 0
     fi
 
-    # bash select fallback
-    local -a menu_items=( "$latest_label" )
+    # bash select fallback — keep raw tag values separate from display labels
+    local -a menu_labels=( "$latest_label" )
+    local -a menu_raws=( "__latest__" )
     for v in "${versions[@]}"; do
-        menu_items+=( "$v" )
+        case "$key" in
+            kron4ek-tkg)
+                ver="$v"
+                label="Kron4ek TKG Wine ${ver}  (tag: ${v})"
+                ;;
+            *)
+                ver="${v#proton_}"
+                label="Valve Proton ${ver}  (branch: ${v})"
+                ;;
+        esac
+        menu_labels+=( "$label" )
+        menu_raws+=( "$v" )
     done
     PS3="  Version: "
-    local picked_display
-    select picked_display in "${menu_items[@]}"; do
-        if [ "$picked_display" = "$latest_label" ] || [ -z "$picked_display" ]; then
+    local picked_label
+    select picked_label in "${menu_labels[@]}"; do
+        local _idx=$(( REPLY - 1 ))
+        if [ -z "$picked_label" ] || [ "${menu_raws[$_idx]:-__latest__}" = "__latest__" ]; then
             ok "Using latest (default branch)"; break
         fi
-        _wine_branch="$picked_display"
+        _wine_branch="${menu_raws[$_idx]}"
         ok "Selected: ${_wine_branch}"; break
     done
     PS3=""
