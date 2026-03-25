@@ -418,10 +418,14 @@ check_disk_space() {
         warn "Only ~${avail_gb} GB free in ${dir}"
         warn "A full Proton build (Wine + DXVK + VKD3D-Proton) needs ~20 GB."
         warn "Use --dest to point to a filesystem with more space."
-        printf "  ${C_B}Continue anyway? [y/N]:${C_R} "
-        local ans
-        read -r ans
-        [[ "$ans" =~ ^[yY] ]] || exit 0
+        if ( : >/dev/tty ) 2>/dev/null; then
+            printf "  ${C_B}Continue anyway? [y/N]:${C_R} "
+            local ans
+            read -r ans
+            [[ "$ans" =~ ^[yY] ]] || exit 0
+        else
+            warn "Non-interactive — continuing anyway."
+        fi
     else
         ok "Disk space: ~${avail_gb} GB free"
     fi
