@@ -445,9 +445,10 @@ _detect_container_engine() {
 }
 
 pick_build_method() {
-    [ -e /dev/tty ] || return 0
-    # Already set by --container / --native
+    # Already set by --container / --native flag
     [ -n "$CONTAINER_BUILD" ] && return 0
+    # No interactive terminal — default to native (we may already be inside the container)
+    ( : >/dev/tty ) 2>/dev/null || { CONTAINER_BUILD=false; return 0; }
 
     local _engine
     _engine="$(_detect_container_engine)"
@@ -1671,10 +1672,9 @@ pick_build_name
 #  or in non-interactive mode.
 # ══════════════════════════════════════════════════════════════════════════════
 pick_build_options() {
-    [ -t 0 ] || return 0
-    [ -e /dev/tty ] || return 0
     # Skip when running as the inner container invocation — host already handled options.
     [ "$CONTAINER_BUILD" = "false" ] && return 0
+    ( : >/dev/tty ) 2>/dev/null || return 0
 
     # If any tuning flag was set explicitly on the CLI, skip the wizard —
     # the user already knows what they want.
