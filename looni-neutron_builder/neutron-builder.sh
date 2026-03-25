@@ -148,22 +148,26 @@ WINE_SOURCE_KEYS=( proton-wine proton-wine-experimental kron4ek-tkg )
 declare -A DXVK_SOURCE_URL=(
     [dxvk]="https://github.com/doitsujin/dxvk.git"
     [dxvk-async]="https://github.com/Sporif/dxvk-async.git"
+    [dxvk-release]=""       # download pre-built binaries from GitHub releases
     [none]=""
 )
 declare -A DXVK_SOURCE_DESC=(
-    [dxvk]="DXVK        — D3D9/10/11 → Vulkan (doitsujin/dxvk)"
-    [dxvk-async]="DXVK async  — DXVK + async pipeline compilation"
-    [none]="None        — skip DXVK (falls back to WineD3D for D3D9/10/11)"
+    [dxvk]="DXVK         — D3D9/10/11 → Vulkan (doitsujin/dxvk)"
+    [dxvk-async]="DXVK async   — DXVK + async pipeline compilation"
+    [dxvk-release]="DXVK release — pre-built DLLs from GitHub releases (fastest)"
+    [none]="None         — skip DXVK (falls back to WineD3D for D3D9/10/11)"
 )
 
 # ── VKD3D-Proton source (optional, Phase 2) ───────────────────────────────────
 declare -A VKD3D_SOURCE_URL=(
     [vkd3d-proton]="https://github.com/HansKristian-Work/vkd3d-proton.git"
+    [vkd3d-proton-release]=""   # download pre-built binaries from GitHub releases
     [none]=""
 )
 declare -A VKD3D_SOURCE_DESC=(
-    [vkd3d-proton]="VKD3D-Proton — D3D12 → Vulkan (HansKristian-Work)"
-    [none]="None         — skip VKD3D-Proton (D3D12 games will not work)"
+    [vkd3d-proton]="VKD3D-Proton         — D3D12 → Vulkan (HansKristian-Work)"
+    [vkd3d-proton-release]="VKD3D-Proton release — pre-built DLLs from GitHub releases (fastest)"
+    [none]="None                 — skip VKD3D-Proton (D3D12 games will not work)"
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -217,10 +221,10 @@ ${C_B}Wine source (required):${C_R}
   --no-pull             Skip git pull on an existing source tree
 
 ${C_B}Component selection:${C_R}
-  --dxvk NAME           DXVK variant: dxvk (default) | dxvk-async | none
-                        [Phase 2 — see note below]
-  --vkd3d NAME          VKD3D variant: vkd3d-proton (default) | none
-                        [Phase 2 — see note below]
+  --dxvk NAME           DXVK variant: dxvk (default) | dxvk-release | dxvk-async | none
+                        dxvk-release downloads pre-built DLLs from GitHub — no compile needed
+  --vkd3d NAME          VKD3D variant: vkd3d-proton (default) | vkd3d-proton-release | none
+                        vkd3d-proton-release downloads pre-built DLLs from GitHub — no compile needed
   --dxvk-branch BRANCH  Pin DXVK to a specific tag
   --vkd3d-branch BRANCH Pin VKD3D-Proton to a specific tag
 
@@ -613,7 +617,12 @@ _run_container_build() {
         cfg_mount=( -v "${CUSTOM_CFG}:${container_home}/neutron-customization.cfg:ro,${vol_flag#:}" )
     fi
 
-    exec "$engine" run --rm -it \
+    # Only allocate a TTY when stdin is a real terminal; without this,
+    # running via nohup/redirection causes podman to exit silently.
+    local tty_flag="-i"
+    [ -t 0 ] && tty_flag="-it"
+
+    exec "$engine" run --rm $tty_flag \
         "${engine_flags[@]}" \
         -v "${_LIB_DIR}:${container_home}${vol_flag}" \
         -v "${_self}:${container_home}/neutron-builder.sh:ro,${vol_flag#:}" \
@@ -636,6 +645,10 @@ fetch_source() {
     local branch="$2"
     local dest="$3"
     local shallow="${4:-true}"
+
+    # Allow git to operate on bind-mounted directories owned by a different UID
+    # (common when running as root or in a container with --userns=keep-id).
+    git config --global --add safe.directory '*' 2>/dev/null || true
 
     local depth_flag=()
     [ "$shallow" = "true" ] && depth_flag=( "--depth=1" )
@@ -1355,7 +1368,7 @@ _install_logged() {
         _draw_install "$_total" "$_total" "complete ✓" "$_start"
         printf "\n"
 
-        [ "$_make_exit" -ne 0 ] && return "$_make_exit"
+        return "$_make_exit"
     else
         make "$@" install 2>&1 | tee -a "${BUILD_LOG:-/dev/null}"
     fi
@@ -1426,18 +1439,22 @@ print_summary() {
         printf "  ${C_B}Wine version :${C_R} %s\n" "$wine_ver"
     fi
 
-    # Phase 2 component status
+    # Phase 2 component status — check actual DLL presence, not just source key
     printf "\n  ${C_B}Component status:${C_R}\n"
     printf "    ${C_GRN}✓${C_R}  proton-wine   — built and installed\n"
-    if [ "${DXVK_SOURCE_KEY}" != "none" ]; then
-        printf "    ${C_YLW}◌${C_R}  DXVK          — Phase 2 (not yet built)\n"
-    else
+    if [ "${DXVK_SOURCE_KEY}" = "none" ]; then
         printf "    ${C_DIM}-${C_R}  DXVK          — skipped (--dxvk none)\n"
-    fi
-    if [ "${VKD3D_SOURCE_KEY}" != "none" ]; then
-        printf "    ${C_YLW}◌${C_R}  VKD3D-Proton  — Phase 2 (not yet built)\n"
+    elif [ -n "$(find "${install_prefix}/files/lib64/wine/dxvk" -name '*.dll' 2>/dev/null | head -1)" ]; then
+        printf "    ${C_GRN}✓${C_R}  DXVK          — installed (${DXVK_SOURCE_KEY})\n"
     else
+        printf "    ${C_YLW}◌${C_R}  DXVK          — Phase 2 (not yet built)\n"
+    fi
+    if [ "${VKD3D_SOURCE_KEY}" = "none" ]; then
         printf "    ${C_DIM}-${C_R}  VKD3D-Proton  — skipped (--vkd3d none)\n"
+    elif [ -n "$(find "${install_prefix}/files/lib64/wine/vkd3d-proton" -name '*.dll' 2>/dev/null | head -1)" ]; then
+        printf "    ${C_GRN}✓${C_R}  VKD3D-Proton  — installed (${VKD3D_SOURCE_KEY})\n"
+    else
+        printf "    ${C_YLW}◌${C_R}  VKD3D-Proton  — Phase 2 (not yet built)\n"
     fi
 
     printf "\n  ${C_B}To use with Steam:${C_R}\n"
@@ -1596,7 +1613,10 @@ pick_build_name
 #  or in non-interactive mode.
 # ══════════════════════════════════════════════════════════════════════════════
 pick_build_options() {
+    [ -t 0 ] || return 0
     [ -e /dev/tty ] || return 0
+    # Skip when running as the inner container invocation — host already handled options.
+    [ "$CONTAINER_BUILD" = "false" ] && return 0
 
     # If any tuning flag was set explicitly on the CLI, skip the wizard —
     # the user already knows what they want.
@@ -1751,8 +1771,95 @@ fetch_source \
     err "configure.ac not found in: $WINE_SOURCE_DIR
      This does not look like a Wine source tree."
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  _download_dxvk_release  — install pre-built DXVK DLLs from GitHub releases
+#  _download_vkd3d_release — install pre-built VKD3D-Proton DLLs from GitHub releases
+#
+#  Usage: _download_dxvk_release  <dest_64> <dest_32>
+#         _download_vkd3d_release <dest_64> <dest_32>
+# ══════════════════════════════════════════════════════════════════════════════
+_download_dxvk_release() {
+    local dest_64="$1" dest_32="$2"
+
+    msg "Fetching latest DXVK release info from GitHub..."
+    local release_json
+    release_json=$(curl -fsSL \
+        "https://api.github.com/repos/doitsujin/dxvk/releases/latest") \
+        || err "Failed to fetch DXVK release info from GitHub API"
+
+    local version tarball_url
+    version=$(printf '%s' "$release_json" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
+    tarball_url=$(printf '%s' "$release_json" \
+        | python3 -c "
+import sys, json
+rel = json.load(sys.stdin)
+url = next((a['browser_download_url'] for a in rel['assets']
+            if a['name'].endswith('.tar.gz')), None)
+if not url: raise SystemExit('No .tar.gz asset in DXVK release')
+print(url)")
+    msg2 "DXVK version : ${version}"
+    msg2 "Downloading  : ${tarball_url}"
+
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    curl -fsSL "$tarball_url" | tar -xz -C "$tmpdir" \
+        || err "Failed to download/extract DXVK tarball"
+
+    mkdir -p "$dest_64" "$dest_32"
+    local c64=0 c32=0
+    while IFS= read -r f; do cp "$f" "$dest_64/"; c64=$(( c64+1 )); done \
+        < <(find "$tmpdir" -path '*/x64/*.dll' 2>/dev/null | sort)
+    while IFS= read -r f; do cp "$f" "$dest_32/"; c32=$(( c32+1 )); done \
+        < <(find "$tmpdir" -path '*/x32/*.dll' 2>/dev/null | sort)
+    rm -rf "$tmpdir"
+
+    [ "$c64" -gt 0 ] || err "No x64 DLLs found in DXVK release tarball"
+    ok "DXVK ${version} installed: ${c64} x64 DLLs, ${c32} x32 DLLs"
+}
+
+_download_vkd3d_release() {
+    local dest_64="$1" dest_32="$2"
+
+    msg "Fetching latest VKD3D-Proton release info from GitHub..."
+    local release_json
+    release_json=$(curl -fsSL \
+        "https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest") \
+        || err "Failed to fetch VKD3D-Proton release info from GitHub API"
+
+    local version tarball_url
+    version=$(printf '%s' "$release_json" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
+    tarball_url=$(printf '%s' "$release_json" \
+        | python3 -c "
+import sys, json
+rel = json.load(sys.stdin)
+url = next((a['browser_download_url'] for a in rel['assets']
+            if a['name'].endswith('.tar.zst')), None)
+if not url: raise SystemExit('No .tar.zst asset in VKD3D-Proton release')
+print(url)")
+    msg2 "VKD3D-Proton version : ${version}"
+    msg2 "Downloading          : ${tarball_url}"
+
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    curl -fsSL "$tarball_url" | tar -I zstd -x -C "$tmpdir" \
+        || err "Failed to download/extract VKD3D-Proton tarball"
+
+    mkdir -p "$dest_64" "$dest_32"
+    local c64=0 c32=0
+    while IFS= read -r f; do cp "$f" "$dest_64/"; c64=$(( c64+1 )); done \
+        < <(find "$tmpdir" -path '*/x64/*.dll' 2>/dev/null | sort)
+    while IFS= read -r f; do cp "$f" "$dest_32/"; c32=$(( c32+1 )); done \
+        < <(find "$tmpdir" \( -path '*/x86/*.dll' -o -path '*/x32/*.dll' \) 2>/dev/null | sort)
+    rm -rf "$tmpdir"
+
+    [ "$c64" -gt 0 ] || err "No x64 DLLs found in VKD3D-Proton release tarball"
+    ok "VKD3D-Proton ${version} installed: ${c64} x64 DLLs, ${c32} x86 DLLs"
+}
+
 # ── PHASE 2 HOOK: Fetch DXVK ─────────────────────────────────────────────────
-if [ "${DXVK_SOURCE_KEY}" != "none" ]; then
+if [ "${DXVK_SOURCE_KEY}" != "none" ] && [ "${DXVK_SOURCE_KEY}" != "dxvk-release" ]; then
     section "DXVK source  [Phase 2]"
     DXVK_SOURCE_DIR="${SRC_ROOT}/dxvk-${DXVK_SOURCE_KEY}"
     _dxvk_branch="${DXVK_BRANCH_ARG:-}"
@@ -1769,7 +1876,7 @@ if [ "${DXVK_SOURCE_KEY}" != "none" ]; then
 fi
 
 # ── PHASE 2 HOOK: Fetch VKD3D-Proton ─────────────────────────────────────────
-if [ "${VKD3D_SOURCE_KEY}" != "none" ]; then
+if [ "${VKD3D_SOURCE_KEY}" != "none" ] && [ "${VKD3D_SOURCE_KEY}" != "vkd3d-proton-release" ]; then
     section "VKD3D-Proton source  [Phase 2]"
     VKD3D_SOURCE_DIR="${SRC_ROOT}/vkd3d-proton"
     _vkd3d_branch="${VKD3D_BRANCH_ARG:-}"
@@ -1913,6 +2020,11 @@ elif [ "${REINSTALL_COMPONENTS:-false}" = "true" ]; then
             ok "DXVK 32-bit: ${_n} DLLs installed"
         fi
     fi
+elif [ "${DXVK_SOURCE_KEY}" = "dxvk-release" ]; then
+    section "DXVK  — downloading pre-built release"
+    _download_dxvk_release \
+        "${WINE_INSTALL_PREFIX}/lib64/wine/dxvk" \
+        "${WINE_INSTALL_PREFIX}/lib/wine/dxvk"
 elif [ "${DXVK_SOURCE_KEY}" != "none" ]; then
     if [ -x "$DXVK_BUILDER" ]; then
         export NEUTRON_PACKAGE_DIR
@@ -1955,6 +2067,11 @@ if [ "${REINSTALL_COMPONENTS:-false}" = "true" ]; then
             ok "VKD3D-Proton 32-bit: ${_n} DLLs installed"
         fi
     fi
+elif [ "${VKD3D_SOURCE_KEY}" = "vkd3d-proton-release" ]; then
+    section "VKD3D-Proton  — downloading pre-built release"
+    _download_vkd3d_release \
+        "${WINE_INSTALL_PREFIX}/lib64/wine/vkd3d-proton" \
+        "${WINE_INSTALL_PREFIX}/lib/wine/vkd3d-proton"
 elif [ "${VKD3D_SOURCE_KEY}" != "none" ]; then
     if [ -x "$VKD3D_BUILDER" ]; then
         export NEUTRON_PACKAGE_DIR

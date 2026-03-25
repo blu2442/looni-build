@@ -206,7 +206,7 @@ _make_compile_bar() {
     local _opencl_make_arg=()
     [ -n "${OPENCL_LIBS:-}" ] && _opencl_make_arg=("OPENCL_LIBS=${OPENCL_LIBS}")
 
-    if [ ! -e /dev/tty ] || [ "${VERBOSE_BUILD:-false}" = "true" ]; then
+    if ! ( : >/dev/tty ) 2>/dev/null || [ "${VERBOSE_BUILD:-false}" = "true" ]; then
         _make_logged "$@"
         return
     fi
@@ -337,7 +337,7 @@ _make_compile_bar() {
 #  Usage: _run_configure <configure-binary> [args...]
 # ══════════════════════════════════════════════════════════════════════════════
 _run_configure() {
-    if [ ! -e /dev/tty ] || [ "${VERBOSE_BUILD:-false}" = "true" ]; then
+    if ! ( : >/dev/tty ) 2>/dev/null || [ "${VERBOSE_BUILD:-false}" = "true" ]; then
         "$@" 2>&1 | tee -a "$BUILD_LOG"
         return
     fi

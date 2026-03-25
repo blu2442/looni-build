@@ -121,6 +121,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wayland-protocols \
     libegl-dev \
     libxkbcommon-dev \
+    libxkbregistry-dev \
 
     # Vulkan (headers are bundled inside libvulkan-dev on Ubuntu 24.04)
     libvulkan-dev \
@@ -183,6 +184,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender-dev:i386 \
     libvulkan-dev:i386 \
     libwayland-dev:i386 \
+    libxkbregistry-dev:i386 \
     libasound2-dev:i386 \
     libpulse-dev:i386 \
     # libgstreamer1.0-dev:i386 and libgstreamer-plugins-base1.0-dev:i386 are
@@ -229,12 +231,12 @@ RUN _existing_user="$(getent passwd "${BUILD_UID}" 2>/dev/null | cut -d: -f1 || 
            groupdel "$_existing_group" 2>/dev/null || true; \
        fi \
     && groupadd --gid "${BUILD_GID}" "${BUILD_USER}" 2>/dev/null || true \
-    && useradd \
+    && (getent passwd "${BUILD_USER}" >/dev/null 2>&1 || useradd \
            --uid "${BUILD_UID}" \
            --gid "${BUILD_GID}" \
            --shell /bin/bash \
            --create-home \
-           "${BUILD_USER}"
+           "${BUILD_USER}")
 
 # ── Create persistent ccache directory ─────────────────────────────────────
 RUN mkdir -p /home/"${BUILD_USER}"/.ccache \
@@ -251,5 +253,8 @@ RUN mkdir -p /home/"${BUILD_USER}"/.config/ccache \
 # ── Switch to the build user ─────────────────────────────────────────────────
 USER "${BUILD_USER}"
 WORKDIR /home/"${BUILD_USER}"/looni-neutron_builder
+
+# ── Trust all directories for git (needed when bind-mounts are owned by root) ─
+RUN git config --global --add safe.directory '*'
 
 CMD ["/bin/bash"]
