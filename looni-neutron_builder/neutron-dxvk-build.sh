@@ -78,8 +78,8 @@ msg2 "Jobs        : ${JOBS}"
 #  Pass FORCE_REBUILD=true (or --dxvk-only from neutron-builder.sh) to skip
 #  this check and always rebuild from source.
 # ══════════════════════════════════════════════════════════════════════════════
-_dxvk_prebuilt_count_64=$(find "$BUILD_DIR_64" -name '*.dll' 2>/dev/null | wc -l)
-_dxvk_prebuilt_count_32=$(find "$BUILD_DIR_32" -name '*.dll' 2>/dev/null | wc -l)
+_dxvk_prebuilt_count_64=$(find "$BUILD_DIR_64" -name '*.dll' 2>/dev/null | wc -l || true)
+_dxvk_prebuilt_count_32=$(find "$BUILD_DIR_32" -name '*.dll' 2>/dev/null | wc -l || true)
 
 if [ "${FORCE_REBUILD:-false}" != "true" ] \
    && [ "$_dxvk_prebuilt_count_64" -gt 0 ]; then

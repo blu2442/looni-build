@@ -73,8 +73,8 @@ msg2 "Jobs        : ${JOBS}"
 #  Pass FORCE_REBUILD=true (or --vkd3d-only from neutron-builder.sh) to skip
 #  this check and always rebuild from source.
 # ══════════════════════════════════════════════════════════════════════════════
-_vkd3d_prebuilt_count_64=$(find "$BUILD_DIR_64" -name '*.dll' 2>/dev/null | wc -l)
-_vkd3d_prebuilt_count_32=$(find "$BUILD_DIR_32" -name '*.dll' 2>/dev/null | wc -l)
+_vkd3d_prebuilt_count_64=$(find "$BUILD_DIR_64" -name '*.dll' 2>/dev/null | wc -l || true)
+_vkd3d_prebuilt_count_32=$(find "$BUILD_DIR_32" -name '*.dll' 2>/dev/null | wc -l || true)
 
 if [ "${FORCE_REBUILD:-false}" != "true" ] \
    && [ "$_vkd3d_prebuilt_count_64" -gt 0 ]; then
