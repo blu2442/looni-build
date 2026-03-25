@@ -701,9 +701,13 @@ fetch_source() {
 pick_wine_version() {
     local url="$1" key="$2"
 
-    [ -t 0 ]                                               || return 0
     [ "${WINE_SOURCE_HAS_VERSIONS[$key]:-false}" = "true" ] || return 0
     [ -z "$WINE_SOURCE_BRANCH_ARG" ]                        || return 0
+
+    # Detect whether we have an interactive terminal (fzf opens /dev/tty directly,
+    # so this is more reliable than [ -t 0 ] when stdin is redirected).
+    local _have_tty=false
+    ( : >/dev/tty ) 2>/dev/null && _have_tty=true
 
     section "Version selection"
     msg2 "Fetching available versions from remote…"
@@ -712,6 +716,12 @@ pick_wine_version() {
     local ref_type="${WINE_SOURCE_VERSION_REF_TYPE[$key]:-tags}"
     local -a versions=()
     local raw_refs
+
+    if [ "$_have_tty" = "false" ] && [ "$ref_type" = "heads" ]; then
+        # No TTY, branch-based source — default branch is a valid build target
+        warn "No interactive terminal — using default branch for ${key}."
+        return 0
+    fi
 
     if [ "$ref_type" = "heads" ]; then
         # Valve proton-wine: branches named proton_X.Y
@@ -762,6 +772,15 @@ pick_wine_version() {
     fi
 
     ok "Found ${#versions[@]} version(s) — showing newest first"
+
+    # No interactive terminal — auto-select the latest tag.
+    # Tag-based sources (kron4ek-tkg) MUST have a tag; the default branch may
+    # lack configure.ac.  versions[] is sorted newest-first, so [0] is latest.
+    if [ "$_have_tty" = "false" ]; then
+        _wine_branch="${versions[0]}"
+        ok "No interactive terminal — auto-selected latest: ${_wine_branch}"
+        return 0
+    fi
 
     local latest_label="Latest  (default — most recent commit)"
 
