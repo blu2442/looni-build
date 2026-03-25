@@ -622,7 +622,7 @@ _run_container_build() {
     local tty_flag="-i"
     [ -t 0 ] && tty_flag="-it"
 
-    exec "$engine" run --rm $tty_flag \
+    "$engine" run --rm $tty_flag \
         "${engine_flags[@]}" \
         -v "${_LIB_DIR}:${container_home}${vol_flag}" \
         -v "${_self}:${container_home}/neutron-builder.sh:ro,${vol_flag#:}" \
@@ -631,6 +631,20 @@ _run_container_build() {
         -v "looni-neutron_builder-ccache:/home/$(whoami)/.ccache${vol_flag}" \
         "$image_name" \
         bash neutron-builder.sh "${inner_args[@]}"
+    local _container_exit=$?
+
+    # Fix output ownership: if we ran as root but the script dir is owned by
+    # another user (e.g. ember2442), chown the data dir to match so the user
+    # can copy/move the finished package without needing sudo.
+    local _dir_uid _dir_gid
+    _dir_uid=$(stat -c '%u' "$_LIB_DIR")
+    _dir_gid=$(stat -c '%g' "$_LIB_DIR")
+    if [ "$_dir_uid" != "0" ] && [ "$(id -u)" = "0" ]; then
+        msg "Fixing output ownership → ${_dir_uid}:${_dir_gid}"
+        chown -R "${_dir_uid}:${_dir_gid}" "$_DATA_DIR" 2>/dev/null || true
+    fi
+
+    exit "$_container_exit"
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
