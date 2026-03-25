@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ╔═══════════════════════════════════════════════════════════════════════════╗
-# ║         looni-neutron_builder  •  Proton packager                          ║
+# ║         looni-neutron_builder  •  Neutron packager                         ║
 # ║   Assembles a Steam-loadable compatibilitytool from compiled components   ║
 # ╚═══════════════════════════════════════════════════════════════════════════╝
 #
@@ -47,7 +47,7 @@ sep()  { printf "\n${_BLU}${_B}── %s ──${_R}\n" "$*"; }
     err "Wine binary not found at: ${WINE_INSTALL_PREFIX}/bin/wine
      The Wine build may not have installed correctly."
 
-sep "Proton Packager"
+sep "Neutron Packager"
 msg2 "Package dir  : ${NEUTRON_PACKAGE_DIR}"
 msg2 "Wine prefix  : ${WINE_INSTALL_PREFIX}"
 msg2 "Build name   : ${BUILD_NAME}"
@@ -100,7 +100,7 @@ cat > "${NEUTRON_PACKAGE_DIR}/toolmanifest.vdf" << 'EOF'
 "manifest"
 {
   "manifest_version"   "2"
-  "commandline"        "/proton run"
+  "commandline"        "/neutron run"
   "use_sessions"       "1"
   "require_tool_appid" "1628350"
 }
@@ -126,8 +126,8 @@ ok "toolmanifest.vdf written"
 #    STEAM_COMPAT_APP_ID     — the game's AppID (numeric string)
 #
 # ══════════════════════════════════════════════════════════════════════════════
-sep "Writing proton launcher script"
-cat > "${NEUTRON_PACKAGE_DIR}/proton" << 'PROTON_SCRIPT'
+sep "Writing neutron launcher script"
+cat > "${NEUTRON_PACKAGE_DIR}/neutron" << 'NEUTRON_SCRIPT'
 #!/usr/bin/env python3
 # looni-neutron launcher
 # Steam invokes this script with a verb and optional arguments.
@@ -152,12 +152,12 @@ import sys
 import subprocess
 
 # ── Path resolution ────────────────────────────────────────────────────────────
-SCRIPT_PATH = os.path.realpath(__file__)
-PROTON_DIR  = os.path.dirname(SCRIPT_PATH)
-FILES_DIR   = os.path.join(PROTON_DIR, "files")
-BIN_DIR     = os.path.join(FILES_DIR, "bin")
-LIB_DIR     = os.path.join(FILES_DIR, "lib")
-LIB64_DIR   = os.path.join(FILES_DIR, "lib64")
+SCRIPT_PATH  = os.path.realpath(__file__)
+NEUTRON_DIR  = os.path.dirname(SCRIPT_PATH)
+FILES_DIR    = os.path.join(NEUTRON_DIR, "files")
+BIN_DIR      = os.path.join(FILES_DIR, "bin")
+LIB_DIR      = os.path.join(FILES_DIR, "lib")
+LIB64_DIR    = os.path.join(FILES_DIR, "lib64")
 
 # Wine binaries
 WINE_PATH    = os.path.join(BIN_DIR, "wine")
@@ -174,16 +174,16 @@ VKD3D_DIR_64 = os.path.join(LIB64_DIR, "wine", "vkd3d-proton")
 VKD3D_DIR_32 = os.path.join(LIB_DIR,   "wine", "vkd3d-proton")
 
 def die(msg):
-    print(f"proton: ERROR: {msg}", file=sys.stderr)
+    print(f"neutron: ERROR: {msg}", file=sys.stderr)
     sys.exit(1)
 
 # ── Sanity check ───────────────────────────────────────────────────────────────
 if not os.path.isfile(WINE_PATH):
     die(f"Wine binary not found: {WINE_PATH}\n"
-        f"Make sure the Proton build completed successfully.")
+        f"Make sure the neutron build completed successfully.")
 
 if len(sys.argv) < 2:
-    die("Usage: proton <verb> [args...]")
+    die("Usage: neutron <verb> [args...]")
 
 VERB       = sys.argv[1]
 EXTRA_ARGS = sys.argv[2:]
@@ -329,7 +329,7 @@ def init_prefix():
         return
     system_reg = os.path.join(WINE_PREFIX, "system.reg")
     if not os.path.isfile(system_reg):
-        print("proton: initializing Wine prefix...", file=sys.stderr)
+        print("neutron: initializing Wine prefix...", file=sys.stderr)
         subprocess.run(
             [BOOT_PATH, "--init"],
             env=env,
@@ -402,12 +402,12 @@ elif VERB == "stop":
     verb_stop()
 else:
     # Forward-compatibility: unknown verbs attempted as wine commands
-    print(f"proton: unknown verb '{VERB}', forwarding to wine", file=sys.stderr)
+    print(f"neutron: unknown verb '{VERB}', forwarding to wine", file=sys.stderr)
     verb_run([VERB] + EXTRA_ARGS)
-PROTON_SCRIPT
+NEUTRON_SCRIPT
 
-chmod +x "${NEUTRON_PACKAGE_DIR}/proton"
-ok "proton launcher written"
+chmod +x "${NEUTRON_PACKAGE_DIR}/neutron"
+ok "neutron launcher written"
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Write a minimal README inside the package
@@ -457,7 +457,7 @@ _verify() {
 
 _verify "${NEUTRON_PACKAGE_DIR}/compatibilitytool.vdf" "compatibilitytool.vdf"
 _verify "${NEUTRON_PACKAGE_DIR}/toolmanifest.vdf"       "toolmanifest.vdf"
-_verify "${NEUTRON_PACKAGE_DIR}/proton"                 "proton launcher"
+_verify "${NEUTRON_PACKAGE_DIR}/neutron"                "neutron launcher"
 _verify "${WINE_INSTALL_PREFIX}/bin/wine"              "files/bin/wine"
 _verify "${WINE_INSTALL_PREFIX}/bin/wineserver"        "files/bin/wineserver"
 _verify "${WINE_INSTALL_PREFIX}/bin/wine64"            "files/bin/wine64"
