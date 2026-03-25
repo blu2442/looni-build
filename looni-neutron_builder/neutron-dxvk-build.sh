@@ -244,6 +244,22 @@ sys_root = '/usr/${arch}-w64-mingw32'
 # -D__USE_MINGW_ANSI_STDIO=1 enables MinGW's own printf/wprintf extensions.
 c_args   = ['-D_UCRT', '-D__USE_MINGW_ANSI_STDIO=1']
 cpp_args = ['-D_UCRT', '-D__USE_MINGW_ANSI_STDIO=1']
+# Fully self-contained DLLs: no libstdc++-6.dll / libgcc_s_dw2-1.dll /
+# libwinpthread-1.dll dependencies at runtime.
+#
+# -static-libgcc alone is unreliable for DLLs — MinGW sometimes still
+# resolves to the DLL import stub.  We pass the flags explicitly to the
+# linker via -Wl so the static archive is chosen unconditionally:
+#   -Bstatic      switch linker to prefer .a over .dll.a
+#   -lstdc++      pull in static libstdc++ (C++ runtime)
+#   -lwinpthread  static winpthreads (needed by libstdc++-posix)
+#   -lgcc         static libgcc (C helper routines + SEH/DWARF unwind)
+#   -lgcc_eh      static GCC exception-handling helpers
+#   -Bdynamic     restore dynamic resolution for everything else
+c_link_args   = ['-static-libgcc',
+                 '-Wl,-Bstatic,-lwinpthread,-lgcc,-Bdynamic']
+cpp_link_args = ['-static-libgcc',
+                 '-Wl,-Bstatic,-lstdc++,-lwinpthread,-lgcc,-lgcc_eh,-Bdynamic']
 
 [host_machine]
 system     = 'windows'
@@ -374,7 +390,15 @@ _build_dxvk_arch "x86_64" "$BUILD_DIR_64" "$DXVK_DEST_64"
 _build_dxvk_arch "i686"   "$BUILD_DIR_32" "$DXVK_DEST_32"
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Verify output
+#  Verify output and check for unwanted runtime dependencies
+#
+#  A correctly built DXVK DLL must not import:
+#    libstdc++-6.dll   — C++ runtime (must be statically linked)
+#    libgcc_s_dw2-1.dll / libgcc_s_sjlj-1.dll — GCC helpers (must be static)
+#    libwinpthread-1.dll — pthreads (must be static for -posix variant)
+#
+#  If any of these appear, the DLL will fail to load on systems that don't
+#  have the MinGW runtime DLLs installed in the Wine prefix.
 # ══════════════════════════════════════════════════════════════════════════════
 sep "Verifying DXVK install"
 _total=0
@@ -385,3 +409,45 @@ for dir in "$DXVK_DEST_64" "$DXVK_DEST_32"; do
 done
 [ "$_total" -gt 0 ] || err "No DXVK .dll files were installed."
 ok "DXVK ${DXVK_SOURCE_KEY} installed successfully (${_total} total DLL files)"
+
+sep "Checking for dynamic runtime dependencies"
+_bad_deps=0
+_unwanted_dlls="libstdc++-6.dll libgcc_s_dw2-1.dll libgcc_s_sjlj-1.dll libwinpthread-1.dll"
+
+# Prefer arch-specific objdump; fall back to host objdump
+_objdump_64="x86_64-w64-mingw32-objdump"
+_objdump_32="i686-w64-mingw32-objdump"
+command -v "$_objdump_64" >/dev/null 2>&1 || _objdump_64="objdump"
+command -v "$_objdump_32" >/dev/null 2>&1 || _objdump_32="objdump"
+
+_check_dll_deps() {
+    local objdump="$1" dll="$2"
+    local imports
+    imports=$("$objdump" -p "$dll" 2>/dev/null \
+        | grep -i 'DLL Name:' | awk '{print $NF}' | tr '[:upper:]' '[:lower:]')
+    local found_bad=0
+    for _bad in $_unwanted_dlls; do
+        if echo "$imports" | grep -qiF "${_bad,,}"; then
+            warn "  $(basename "$dll") imports ${_bad}  ← should be statically linked!"
+            found_bad=1
+        fi
+    done
+    return "$found_bad"
+}
+
+for dll in "$DXVK_DEST_64"/*.dll; do
+    [ -f "$dll" ] || continue
+    _check_dll_deps "$_objdump_64" "$dll" || _bad_deps=$(( _bad_deps + 1 ))
+done
+for dll in "$DXVK_DEST_32"/*.dll; do
+    [ -f "$dll" ] || continue
+    _check_dll_deps "$_objdump_32" "$dll" || _bad_deps=$(( _bad_deps + 1 ))
+done
+
+if [ "$_bad_deps" -gt 0 ]; then
+    warn "${_bad_deps} DLL(s) have dynamic C++ runtime dependencies."
+    warn "These DLLs will only work if the MinGW runtime DLLs are present in the Wine prefix."
+    warn "Consider rebuilding with FORCE_REBUILD=true to re-apply the static link flags."
+else
+    ok "All DXVK DLLs are self-contained (no dynamic C++ runtime imports)"
+fi

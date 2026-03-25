@@ -11,8 +11,23 @@ set -euo pipefail
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB="$SCRIPT_DIR/modules/winetoolz-lib.sh"
 
+# Find the winetoolz lib root — two possible layouts:
+#   Source tree:   <script-dir>/modules/winetoolz-lib.sh
+#   make install:  <prefix>/lib/looni-winetoolz/modules/winetoolz-lib.sh
+#                  (SCRIPT_DIR is <prefix>/bin; strip /bin, append /lib/looni-winetoolz)
+_WT_LIB_ROOT=""
+for _candidate in \
+    "${SCRIPT_DIR}" \
+    "${SCRIPT_DIR%/bin}/lib/looni-winetoolz"
+do
+    if [[ -f "${_candidate}/modules/winetoolz-lib.sh" ]]; then
+        _WT_LIB_ROOT="${_candidate}"
+        break
+    fi
+done
+
+LIB="${_WT_LIB_ROOT}/modules/winetoolz-lib.sh"
 if [[ ! -f "$LIB" ]]; then
     zenity --error --text="Cannot find winetoolz-lib.sh.\nExpected at: $LIB" 2>/dev/null \
         || echo "FATAL: winetoolz-lib.sh not found at: $LIB"
@@ -59,7 +74,7 @@ printf '  \e[2mZenity menus running — this terminal stays open as the host.\e[
 #  Script paths
 # =============================================================================
 
-MOD="$SCRIPT_DIR/modules/shared_lib"
+MOD="${_WT_LIB_ROOT}/modules/shared_lib"
 DXVK_SETUP_SCRIPT="$MOD/dxvk_setup-gui.sh"
 VKD3D_SETUP_SCRIPT="$MOD/setup_vkd3d_proton-gui.sh"
 NVAPI_SETUP_SCRIPT="$MOD/install_nvapi.sh"

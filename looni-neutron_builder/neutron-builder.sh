@@ -811,7 +811,7 @@ pick_wine_version() {
                 --header="Select a version" \
                 --with-nth=2 \
                 --delimiter=$'\t' \
-                --height=50% \
+                --height=20% \
                 --border \
             || true
         )
@@ -1544,7 +1544,7 @@ pick_source() {
                 --header="Select a proton-wine source" \
                 --with-nth=2 \
                 --delimiter=$'\t' \
-                --height=40% \
+                --height=20% \
                 --border \
             || true
         )

@@ -200,6 +200,10 @@ install-toolz: _dirs
 	    install -m 755 "$$src" "$(DESTDIR)$(TOOLZ_LIBDIR)/$$f"; \
 	    printf "  \033[1;32m+\033[0m $(DESTDIR)$(TOOLZ_LIBDIR)/$$f\n"; \
 	done
+	@printf '#!/usr/bin/env bash\n_d="$$(cd "$$(dirname "$$(readlink -f "$${BASH_SOURCE[0]}")")" && pwd)"\nexec bash "$${_d}/../lib/looni-winetoolz/modules/shared_lib/wine_install_manager.sh" "$$@"\n' \
+	    > "$(DESTDIR)$(BINDIR)/wine_install_mgr"
+	@chmod 755 "$(DESTDIR)$(BINDIR)/wine_install_mgr"
+	@printf "  \033[1;32m+\033[0m $(DESTDIR)$(BINDIR)/wine_install_mgr\n"
 
 # ── .bashrc PATH setup (skipped during staged/packaged installs) ─────────────
 _setup-path:
@@ -218,7 +222,7 @@ _setup-path:
 # ── uninstall ─────────────────────────────────────────────────────────────────
 uninstall:
 	@printf "\033[1;33mRemoving looni-build from %s ...\033[0m\n" "$(DESTDIR)$(PREFIX)"
-	@for cmd in looni-build neutron-builder wine-builder wine_toolz wine-proton_hybrid; do \
+	@for cmd in looni-build neutron-builder wine-builder wine_toolz wine_install_mgr wine-proton_hybrid; do \
 	    f="$(DESTDIR)$(BINDIR)/$$cmd"; \
 	    [ -f "$$f" ] && { rm -f "$$f"; printf "  \033[1;31m-\033[0m $$f\n"; } || true; \
 	done

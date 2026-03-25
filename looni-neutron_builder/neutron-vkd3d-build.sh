@@ -168,15 +168,25 @@ mkdir -p "$WRAPPER_DIR"
 
 _make_wrapper() {
     local real_bin="$1"
+    # Prefer the posix-threading variant: it provides std::vswprintf and other
+    # POSIX extensions that VKD3D-Proton's C++ code needs.
     local real_path
-    real_path="$( command -v "${real_bin}" )" || \
-        err "MinGW compiler not found: ${real_bin}
+    if command -v "${real_bin}-posix" >/dev/null 2>&1; then
+        real_path="$(command -v "${real_bin}-posix")"
+        ok "Using posix variant: ${real_bin}-posix"
+    else
+        real_path="$(command -v "${real_bin}")" || \
+            err "MinGW compiler not found: ${real_bin}
      Install: sudo apt install gcc-mingw-w64 g++-mingw-w64"
+        warn "posix variant not found for ${real_bin}, using win32 variant"
+    fi
+    local _triple="${real_bin%-*}"   # strip trailing -gcc or -g++
+    local _mingw_inc="/usr/${_triple}/include"
     local wrapper="${WRAPPER_DIR}/${real_bin}"
-    printf '#!/bin/sh\nexec "%s" -I"%s" -I"%s" "$@"\n' \
-        "$real_path" "$VULKAN_INCLUDE_ROOT" "$SPIRV_INCLUDE_ROOT" > "$wrapper"
+    printf '#!/bin/sh\nexec "%s" -I"%s" -I"%s" -I"%s" "$@"\n' \
+        "$real_path" "$_mingw_inc" "$VULKAN_INCLUDE_ROOT" "$SPIRV_INCLUDE_ROOT" > "$wrapper"
     chmod +x "$wrapper"
-    ok "Wrapper: ${real_bin}"
+    ok "Wrapper: ${real_bin}  (sysroot: ${_mingw_inc})"
 }
 
 _make_wrapper "x86_64-w64-mingw32-gcc"
@@ -208,9 +218,19 @@ ar      = '${arch}-w64-mingw32-ar'
 strip   = '${arch}-w64-mingw32-strip'
 windres = '${arch}-w64-mingw32-windres'
 widl    = '${WIDL_PATH}'
+pkg-config = ['pkg-config', '--define-variable=prefix=/usr/${arch}-w64-mingw32']
 
 [properties]
 needs_exe_wrapper = true
+sys_root = '/usr/${arch}-w64-mingw32'
+
+[built-in options]
+c_args   = ['-D_UCRT', '-D__USE_MINGW_ANSI_STDIO=1']
+cpp_args = ['-D_UCRT', '-D__USE_MINGW_ANSI_STDIO=1']
+c_link_args   = ['-static-libgcc',
+                 '-Wl,-Bstatic,-lwinpthread,-lgcc,-Bdynamic']
+cpp_link_args = ['-static-libgcc',
+                 '-Wl,-Bstatic,-lstdc++,-lwinpthread,-lgcc,-lgcc_eh,-Bdynamic']
 
 [host_machine]
 system     = 'windows'

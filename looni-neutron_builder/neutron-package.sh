@@ -100,32 +100,90 @@ cat > "${NEUTRON_PACKAGE_DIR}/toolmanifest.vdf" << 'EOF'
 "manifest"
 {
   "manifest_version"   "2"
-  "commandline"        "/neutron run"
+  "commandline"        "/neutron waitforexitandrun"
   "use_sessions"       "1"
-  "require_tool_appid" "1628350"
 }
 EOF
 ok "toolmanifest.vdf written"
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Write the proton launcher script
+#  lsteamclient bootstrap
 #
-#  Steam invokes this Python 3 script with a verb as the first argument.
-#  Supported verbs:
-#    run                — run the game executable directly
-#    waitforexitandrun  — run and wait for exit (most games use this)
-#    runinprefix        — run a command inside the Wine prefix
-#    getcompatpath      — convert a Unix path to a Windows path
-#    getnativepath      — convert a Windows path to a Unix path
-#    stop               — kill the wineserver
+#  kron4ek-tkg Wine builds do not ship lsteamclient.dll — it is a proprietary
+#  Steam API bridge that Valve only distributes with their Proton builds.
+#  Without it, any game that calls SteamAPI_Init() hangs at startup (black
+#  screen) because Wine falls back to a stub that cannot talk to the real
+#  Steam client.
 #
-#  Steam sets these environment variables before calling this script:
-#    STEAM_COMPAT_DATA_PATH  — the game's compatibility data directory
-#                              (the Wine prefix lives at $STEAM_COMPAT_DATA_PATH/pfx)
-#    STEAM_COMPAT_CLIENT_INSTALL_PATH — path to the Steam client
-#    STEAM_COMPAT_APP_ID     — the game's AppID (numeric string)
-#
+#  We look for it in Proton Experimental (the most reliably up-to-date source)
+#  and a handful of other common Proton install locations.  If found, we copy
+#  all four files:
+#    lib/wine/x86_64-windows/lsteamclient.dll  (PE, 64-bit)
+#    lib/wine/x86_64-unix/lsteamclient.so      (Unix bridge, 64-bit)
+#    lib/wine/i386-windows/lsteamclient.dll    (PE, 32-bit)
+#    lib/wine/i386-unix/lsteamclient.so        (Unix bridge, 32-bit)
 # ══════════════════════════════════════════════════════════════════════════════
+sep "Checking for lsteamclient"
+_wine_lib_dir="${WINE_INSTALL_PREFIX}/lib/wine"
+_lsc_target="${_wine_lib_dir}/x86_64-windows/lsteamclient.dll"
+
+if [ -f "${_lsc_target}" ]; then
+    ok "lsteamclient.dll already present — skipping bootstrap"
+else
+    warn "lsteamclient.dll not found in Wine build; searching for Proton source..."
+
+    # Common locations for Proton Experimental across different Steam installs
+    _proton_candidates=(
+        "${HOME}/.steam/steam/steamapps/common/Proton - Experimental/files"
+        "${HOME}/.steam/debian-installation/steamapps/common/Proton - Experimental/files"
+        "${HOME}/.local/share/Steam/steamapps/common/Proton - Experimental/files"
+        "/stuff/SteamLibrary/steamapps/common/Proton - Experimental/files"
+        "/home/blu2442/.steam/debian-installation/steamapps/common/Proton - Experimental/files"
+    )
+    # Also search any SteamLibrary paths from the environment
+    if [ -n "${STEAM_LIBRARY_PATHS:-}" ]; then
+        while IFS= read -r _slib; do
+            _proton_candidates+=("${_slib}/steamapps/common/Proton - Experimental/files")
+        done <<< "${STEAM_LIBRARY_PATHS}"
+    fi
+
+    _proton_src=""
+    for _candidate in "${_proton_candidates[@]}"; do
+        if [ -f "${_candidate}/lib/wine/x86_64-windows/lsteamclient.dll" ]; then
+            _proton_src="${_candidate}"
+            break
+        fi
+    done
+
+    if [ -z "${_proton_src}" ]; then
+        warn "Could not find Proton Experimental — lsteamclient NOT bootstrapped."
+        warn "Steam API games may hang at startup.  Install 'Proton - Experimental'"
+        warn "via Steam to fix this automatically on the next package build."
+    else
+        msg2 "Found Proton source: ${_proton_src}"
+        _lsc_files=(
+            "lib/wine/x86_64-windows/lsteamclient.dll"
+            "lib/wine/x86_64-unix/lsteamclient.so"
+            "lib/wine/i386-windows/lsteamclient.dll"
+            "lib/wine/i386-unix/lsteamclient.so"
+        )
+        _copied=0
+        for _f in "${_lsc_files[@]}"; do
+            _src="${_proton_src}/${_f}"
+            _dst="${_wine_lib_dir}/${_f#lib/wine/}"
+            if [ -f "${_src}" ]; then
+                mkdir -p "$(dirname "${_dst}")"
+                cp -f "${_src}" "${_dst}"
+                msg2 "Copied: ${_f}"
+                (( _copied++ )) || true
+            else
+                warn "Missing in Proton source: ${_f}"
+            fi
+        done
+        ok "lsteamclient bootstrap complete (${_copied} file(s) copied)"
+    fi
+fi
+
 sep "Writing neutron launcher script"
 cat > "${NEUTRON_PACKAGE_DIR}/neutron" << 'NEUTRON_SCRIPT'
 #!/usr/bin/env python3
@@ -150,6 +208,7 @@ cat > "${NEUTRON_PACKAGE_DIR}/neutron" << 'NEUTRON_SCRIPT'
 import os
 import sys
 import subprocess
+import shutil
 
 # ── Path resolution ────────────────────────────────────────────────────────────
 SCRIPT_PATH  = os.path.realpath(__file__)
@@ -158,6 +217,7 @@ FILES_DIR    = os.path.join(NEUTRON_DIR, "files")
 BIN_DIR      = os.path.join(FILES_DIR, "bin")
 LIB_DIR      = os.path.join(FILES_DIR, "lib")
 LIB64_DIR    = os.path.join(FILES_DIR, "lib64")
+WINE_LIB_DIR = os.path.join(FILES_DIR, "lib")   # Wine DLLs live here, not lib64
 
 # Wine binaries
 WINE_PATH    = os.path.join(BIN_DIR, "wine")
@@ -223,7 +283,7 @@ if STEAM_ROOT:
         os.path.join(STEAM_ROOT, "ubuntu12_32"),
     ]
 
-ld_parts = [LIB64_DIR, LIB_DIR,
+ld_parts = [LIB64_DIR, LIB_DIR, WINE_LIB_DIR,
             DXVK_DIR_64, DXVK_DIR_32,
             VKD3D_DIR_64, VKD3D_DIR_32] + overlay_paths
 existing_ld = env.get("LD_LIBRARY_PATH", "")
@@ -240,11 +300,19 @@ if dll_paths:
     existing_dllpath = env.get("WINEDLLPATH", "")
     env["WINEDLLPATH"] = ":".join(dll_paths + ([existing_dllpath] if existing_dllpath else []))
 
-# ── WINEDLLOVERRIDES: force DXVK and VKD3D DLLs to native ────────────────────
+# ── WINEDLLOVERRIDES: force DXVK, VKD3D, and Steam API DLLs to native ────────
 # Without these overrides Wine uses its own built-in WineD3D even if DXVK
 # DLLs are present in WINEDLLPATH.  "n,b" = try native first, then builtin.
-dxvk_overrides = "d3d9=n,b;d3d10=n,b;d3d10_1=n,b;d3d10core=n,b;d3d11=n,b;dxgi=n,b"
-vkd3d_overrides = "d3d12=n,b;d3d12core=n,b"
+#
+# lsteamclient: CRITICAL for games that call SteamAPI_Init().
+#   Wine's built-in lsteamclient stub cannot talk to the real Steam client.
+#   With "n,b" Wine loads the native lsteamclient.dll (built as a PE .dll by
+#   our Wine build) which bridges to the host steamclient.so via the
+#   STEAM_COMPAT_CLIENT_INSTALL_PATH libraries already in LD_LIBRARY_PATH.
+#   Without this, games using Steamworks hang at startup (black screen).
+dxvk_overrides    = "d3d9=n,b;d3d10=n,b;d3d10_1=n,b;d3d10core=n,b;d3d11=n,b;dxgi=n,b"
+vkd3d_overrides   = "d3d12=n,b;d3d12core=n,b"
+steam_overrides   = "lsteamclient=n,b;steamclient=n,b;openvr_api_dxvk=disabled;vrclient_x64=disabled;vrclient=disabled"
 
 # Only add overrides for components that are actually installed
 active_overrides = []
@@ -254,6 +322,11 @@ if os.path.isdir(DXVK_DIR_64) and any(
 if os.path.isdir(VKD3D_DIR_64) and any(
         f.endswith(".dll") for f in os.listdir(VKD3D_DIR_64)):
     active_overrides.append(vkd3d_overrides)
+
+# lsteamclient override is always applied when running inside Steam
+# (STEAM_COMPAT_DATA_PATH is set by Steam before invoking us)
+if COMPAT_DATA:
+    active_overrides.append(steam_overrides)
 
 if active_overrides:
     existing_overrides = env.get("WINEDLLOVERRIDES", "")
@@ -306,23 +379,21 @@ env.setdefault("WINE_LARGE_ADDRESS_AWARE", "1")
 env.setdefault("WINEDEBUG",               "-all")  # suppress noise; override externally if needed
 env.setdefault("DXVK_LOG_LEVEL",          "none")  # suppress DXVK HUD spam by default
 
-# ── Synchronization primitives ────────────────────────────────────────────────
-# fsync uses Linux futex operations for Wine's synchronization objects.
-# It is much faster than the default server-side sync and is already compiled
-# into Valve's proton-wine — it just needs to be enabled here.
-# esync is the older eventfd-based approach; fsync supersedes it but we enable
-# both so Wine picks the best one available on the running kernel.
-# ntsync (kernel module / Linux 6.14+) is auto-detected by Wine when available;
-# setting WINEFSYNC=1 does not conflict with it.
-env.setdefault("WINEFSYNC", "1")
-env.setdefault("WINEESYNC", "1")
-
 # Steam App ID forwarding
 if APP_ID:
     env.setdefault("SteamAppId",  APP_ID)
     env.setdefault("SteamGameId", GAME_ID)
 
 # ── Prefix initialization ──────────────────────────────────────────────────────
+def _install_dlls_into_prefix(src_dir, dst_dir):
+    """Copy all .dll files from src_dir into dst_dir (system32 or syswow64)."""
+    if not os.path.isdir(src_dir):
+        return
+    os.makedirs(dst_dir, exist_ok=True)
+    for f in os.listdir(src_dir):
+        if f.lower().endswith(".dll"):
+            shutil.copy2(os.path.join(src_dir, f), os.path.join(dst_dir, f))
+
 def init_prefix():
     """Initialize the Wine prefix if it hasn't been set up yet."""
     if not WINE_PREFIX:
@@ -336,6 +407,14 @@ def init_prefix():
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
+        sys32  = os.path.join(WINE_PREFIX, "drive_c", "windows", "system32")
+        syswow = os.path.join(WINE_PREFIX, "drive_c", "windows", "syswow64")
+        print("neutron: installing DXVK into prefix...", file=sys.stderr)
+        _install_dlls_into_prefix(DXVK_DIR_64, sys32)
+        _install_dlls_into_prefix(DXVK_DIR_32, syswow)
+        print("neutron: installing VKD3D-Proton into prefix...", file=sys.stderr)
+        _install_dlls_into_prefix(VKD3D_DIR_64, sys32)
+        _install_dlls_into_prefix(VKD3D_DIR_32, syswow)
 
 # ── Verb handlers ──────────────────────────────────────────────────────────────
 def verb_run(args, wait=True):

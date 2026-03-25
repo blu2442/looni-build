@@ -12,18 +12,30 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 _find_tool() {
     local name="$1"
     local _bin
-    # Installed layout: all tools are siblings in the same bin/ directory
+
+    # 1. Installed layout: tool is a sibling binary in the same bin/ directory
     _bin="${SCRIPT_DIR}/${name}"
     [ -x "$_bin" ] && { echo "$_bin"; return; }
-    # Source tree layout: each tool lives in its own subdirectory
+
+    # 2. Source tree layout: each tool lives in its own subdirectory
     case "$name" in
         wine-builder)       _bin="${SCRIPT_DIR}/looni-wine_builder/wine-builder.sh" ;;
         neutron-builder)    _bin="${SCRIPT_DIR}/looni-neutron_builder/neutron-builder.sh" ;;
-        wine-proton_hybrid) _bin="${SCRIPT_DIR}/looni-wine-proton_hybrid_builder/wine-proton_hybrid-v1_0_0.sh" ;;
+        wine-proton_hybrid) _bin="${SCRIPT_DIR}/looni-wine-proton_hybrid_builder/wine-proton_hybrid-v1.0.0.sh" ;;
         wine_toolz)         _bin="${SCRIPT_DIR}/looni-winetoolz/wine_toolz.sh" ;;
         wine_install_mgr)   _bin="${SCRIPT_DIR}/looni-winetoolz/modules/shared_lib/wine_install_manager.sh" ;;
     esac
     [ -x "$_bin" ] && { echo "$_bin"; return; }
+
+    # 3. Installed lib layout: make install puts modules under prefix/lib/
+    #    (SCRIPT_DIR is bin/; strip /bin to get prefix, then look in lib/)
+    local _lib="${SCRIPT_DIR%/bin}/lib"
+    case "$name" in
+        wine_toolz)       _bin="${_lib}/looni-winetoolz/wine_toolz.sh" ;;
+        wine_install_mgr) _bin="${_lib}/looni-winetoolz/modules/shared_lib/wine_install_manager.sh" ;;
+    esac
+    [ -x "$_bin" ] && { echo "$_bin"; return; }
+
     echo ""
 }
 
