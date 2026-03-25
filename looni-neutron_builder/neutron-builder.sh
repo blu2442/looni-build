@@ -131,7 +131,7 @@ declare -A WINE_SOURCE_BRANCH=(
 declare -A WINE_SOURCE_DESC=(
     [proton-wine]="Valve proton-wine     — stable branches (version picker)"
     [proton-wine-experimental]="Valve proton-wine exp  — bleeding-edge (no version picker)"
-    [kron4ek-tkg]="Kron4ek wine-tkg      — mainline + Staging + TKG patches + ntsync"
+    [kron4ek-tkg]="Kron4ek wine-tkg      — Wine source tree with Staging + TKG + ntsync patches"
 )
 # Valve uses branches (proton_9.0, proton_8.0 …), not tags
 declare -A WINE_SOURCE_HAS_VERSIONS=(
@@ -1788,12 +1788,9 @@ fetch_source \
 [ -d "$WINE_SOURCE_DIR" ] || \
     err "Wine source directory not found after fetch: $WINE_SOURCE_DIR"
 
-# kron4ek-tkg is a build system repo, not a Wine source tree — no configure.ac
-if [ "$WINE_SOURCE_KEY" != "kron4ek-tkg" ]; then
-    [ -f "${WINE_SOURCE_DIR}/configure.ac" ] || \
-        err "configure.ac not found in: $WINE_SOURCE_DIR
+[ -f "${WINE_SOURCE_DIR}/configure.ac" ] || \
+    err "configure.ac not found in: $WINE_SOURCE_DIR
      This does not look like a Wine source tree."
-fi
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  _download_dxvk_release  — install pre-built DXVK DLLs from GitHub releases
@@ -1982,34 +1979,6 @@ else
     # ── Install ─────────────────────────────────────────────────────────────
     install_wine "$BUILD_RUN_DIR" "$WINE_INSTALL_PREFIX"
 
-    # ── Kron4ek TKG: run compat redist + install DLLs ───────────────────────
-    # For kron4ek-tkg builds the proton-tkg build system generates lsteamclient,
-    # vrclient, steamexe via  make CONTAINER=1 redist  rather than the standard
-    # Wine make install.  Apply all Kron4ek compat patches and run it here.
-    if [ "$WINE_SOURCE_KEY" = "kron4ek-tkg" ]; then
-        section "Kron4ek TKG — running compat redist"
-        # Locate the proton-tkg build dir (proton-tkg clones it alongside src-wine)
-        local _tkg_build=""
-        for _candidate in \
-            "$WINE_SOURCE_DIR/../build" \
-            "$SRC_ROOT/proton-tkg/proton-tkg/external-resources/Proton/build" \
-            "$SRC_ROOT/kron4ek-tkg/proton-tkg/external-resources/Proton/build"; do
-            if [ -f "$_candidate/../Makefile.in" ]; then
-                _tkg_build="$_candidate"
-                break
-            fi
-        done
-        if [ -n "$_tkg_build" ]; then
-            msg2 "proton-tkg build dir: $_tkg_build"
-            _kron4ek_tkg_compat_redist "$_tkg_build" && \
-                _kron4ek_tkg_install_redist_to_proton "$_tkg_build" \
-                    "$NEUTRON_PACKAGE_DIR" || \
-                warn "Kron4ek TKG redist failed — lsteamclient/vrclient may be missing"
-        else
-            warn "Could not locate proton-tkg build dir — skipping redist"
-            warn "Run manually:  $0 --kron4ek-redist <BUILD_DIR> $NEUTRON_PACKAGE_DIR"
-        fi
-    fi
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
