@@ -236,11 +236,14 @@ pkg-config = ['pkg-config', '--define-variable=prefix=/usr/${arch}-w64-mingw32']
 
 [properties]
 needs_exe_wrapper = true
-# Set the sysroot to the MinGW prefix so meson resolves headers and libs
-# from the Windows cross-compiler tree, not from Linux /usr/include.
-# This prevents Linux headers (math.h, stdint.h, etc.) from leaking into
-# MinGW builds and causing type conflicts (_Float128, uintptr_t, etc.).
 sys_root = '/usr/${arch}-w64-mingw32'
+
+[built-in options]
+# Use Universal CRT (UCRT) mode: fixes std::vswprintf and std::to_wstring
+# missing from MinGW GCC 13's basic_string.h in non-UCRT mode.
+# -D__USE_MINGW_ANSI_STDIO=1 enables MinGW's own printf/wprintf extensions.
+c_args   = ['-D_UCRT', '-D__USE_MINGW_ANSI_STDIO=1']
+cpp_args = ['-D_UCRT', '-D__USE_MINGW_ANSI_STDIO=1']
 
 [host_machine]
 system     = 'windows'
