@@ -183,15 +183,19 @@ mkdir -p "$WRAPPER_DIR"
 
 _make_wrapper() {
     local real_bin="$1"
+    # Prefer the posix-threading variant: it provides std::vswprintf and other
+    # POSIX extensions that DXVK's C++ code needs.  Fall back to the plain
+    # (win32-threading) binary only if the posix variant is absent.
     local real_path
-    real_path="$( command -v "${real_bin}" )" || \
-        err "MinGW compiler not found: ${real_bin}
+    if command -v "${real_bin}-posix" >/dev/null 2>&1; then
+        real_path="$(command -v "${real_bin}-posix")"
+        ok "Using posix variant: ${real_bin}-posix"
+    else
+        real_path="$(command -v "${real_bin}")" || \
+            err "MinGW compiler not found: ${real_bin}
      Install: sudo apt install gcc-mingw-w64 g++-mingw-w64"
-    # Derive the MinGW sysroot include path from the compiler triple
-    # (x86_64-w64-mingw32-gcc → /usr/x86_64-w64-mingw32/include).
-    # This must come FIRST so MinGW's stdint.h/corecrt.h win over
-    # Linux system headers (/usr/include) that meson may inject via
-    # pkg-config, preventing uintptr_t redefinition conflicts.
+        warn "posix variant not found for ${real_bin}, using win32 variant"
+    fi
     local _triple="${real_bin%-*}"   # strip trailing -gcc or -g++
     local _mingw_inc="/usr/${_triple}/include"
     local wrapper="${WRAPPER_DIR}/${real_bin}"
