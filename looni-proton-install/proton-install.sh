@@ -90,10 +90,13 @@ NONINTERACTIVE=0           # 1 when a CLI action flag is given
 GE_REPO="GloriousEggroll/proton-ge-custom"
 GE_ASSET_PATTERN="GE-Proton.*\.tar\.gz$"
 
-# Directories to scan for locally-built looni-neutron packages
+# Directories to scan for locally-built looni-neutron packages.
+# neutron-builder always writes to the XDG data dir regardless of whether
+# it is run from the source tree or after make install, so the first entry
+# covers both cases.
 LOCAL_BUILD_DIRS=(
+    "${XDG_DATA_HOME:-${HOME}/.local/share}/looni-neutron_builder/buildz/install"
     "${HOME}/.local/share/looni-neutron_builder/buildz/install"
-    "${HOME}/looni-neutron_builder/buildz/install"
 )
 
 # ══════════════════════════════════════════════════════════════════════════════

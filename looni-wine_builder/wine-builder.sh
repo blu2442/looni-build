@@ -35,10 +35,12 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 #    ~/.local/share/looni-wine_builder/      ← build output + git clones
 # ══════════════════════════════════════════════════════════════════════════
 if [ -f "${SCRIPT_DIR}/wine-build-core.sh" ]; then
-    # Running directly from the source tree
+    # Running directly from the source tree — lib scripts are alongside us,
+    # but data (build output, git clones) always goes to the XDG data dir so
+    # builds never accumulate inside the git repo.
     _LIB_DIR="$SCRIPT_DIR"
-    _CFG_DIR="$SCRIPT_DIR"
-    _DATA_DIR="$SCRIPT_DIR"
+    _CFG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/looni-build"
+    _DATA_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}/looni-wine_builder"
 elif [ -f "${SCRIPT_DIR}/../lib/looni-wine_builder/wine-build-core.sh" ]; then
     # Running from an installed bin/ directory
     _LIB_DIR="$(cd "${SCRIPT_DIR}/../lib/looni-wine_builder" && pwd)"
