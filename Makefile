@@ -27,10 +27,11 @@ BINDIR  := $(PREFIX)/bin
 
 # Each sub-project gets its own lib directory so internal SCRIPT_DIR-relative
 # paths continue to work correctly after install.
-NEUTRON_LIBDIR := $(PREFIX)/lib/looni-neutron_builder
-WINE_LIBDIR   := $(PREFIX)/lib/looni-wine_builder
-HYBRID_LIBDIR := $(PREFIX)/lib/looni-wine-proton_hybrid_builder
-TOOLZ_LIBDIR  := $(PREFIX)/lib/looni-winetoolz
+NEUTRON_LIBDIR  := $(PREFIX)/lib/looni-neutron_builder
+WINE_LIBDIR     := $(PREFIX)/lib/looni-wine_builder
+HYBRID_LIBDIR   := $(PREFIX)/lib/looni-wine-proton_hybrid_builder
+TOOLZ_LIBDIR    := $(PREFIX)/lib/looni-winetoolz
+PROTON_I_LIBDIR := $(PREFIX)/lib/looni-proton-install
 
 CFGDIR  := $(HOME)/.config/looni-build
 DESTDIR ?=
@@ -45,10 +46,11 @@ MARKER_WINE_E   := \# ── end looni-build wine-default ──
 # ── Source roots ──────────────────────────────────────────────────────────────
 ROOT   := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
 LAUNCHER := $(ROOT)looni-build.sh
-NEUTRON := $(ROOT)looni-neutron_builder
-WINE   := $(ROOT)looni-wine_builder
-HYBRID := $(ROOT)looni-wine-proton_hybrid_builder
-TOOLZ  := $(ROOT)looni-winetoolz
+NEUTRON   := $(ROOT)looni-neutron_builder
+WINE      := $(ROOT)looni-wine_builder
+HYBRID    := $(ROOT)looni-wine-proton_hybrid_builder
+TOOLZ     := $(ROOT)looni-winetoolz
+PROTON_I  := $(ROOT)looni-proton-install
 
 # ── File lists ────────────────────────────────────────────────────────────────
 
@@ -80,6 +82,9 @@ WINE_CFG  := customization.cfg
 # hybrid installer: launcher only
 HYBRID_BIN := wine-proton_hybrid-v1.0.0.sh
 
+# proton-install: single script
+PROTON_I_BIN := proton-install.sh
+
 # winetoolz: launcher + all modules
 TOOLZ_BIN     := wine_toolz.sh
 TOOLZ_MODULES := \
@@ -106,15 +111,16 @@ TOOLZ_MODULES := \
 
 # ── Phony targets ─────────────────────────────────────────────────────────────
 .PHONY: all install install-neutron install-wine install-hybrid install-toolz \
-        install-launcher uninstall help _dirs _setup-path
+        install-launcher install-proton-install uninstall help _dirs _setup-path
 
 all: help
 
 # ── install ───────────────────────────────────────────────────────────────────
-install: _dirs install-launcher install-neutron install-wine install-hybrid install-toolz _setup-path
+install: _dirs install-launcher install-neutron install-wine install-hybrid install-toolz install-proton-install _setup-path
 	@printf "\n\033[1;32m ✓  looni-build installed to %s\033[0m\n\n" "$(DESTDIR)$(PREFIX)"
 	@printf "  looni-build        → $(DESTDIR)$(BINDIR)/looni-build\n"
-	@printf "  neutron-builder     → $(DESTDIR)$(BINDIR)/neutron-builder\n"
+	@printf "  neutron-builder    → $(DESTDIR)$(BINDIR)/neutron-builder\n"
+	@printf "  proton-install     → $(DESTDIR)$(BINDIR)/proton-install\n"
 	@printf "  wine-builder       → $(DESTDIR)$(BINDIR)/wine-builder\n"
 	@printf "  wine_toolz         → $(DESTDIR)$(BINDIR)/wine_toolz\n"
 	@printf "  wine-proton_hybrid → $(DESTDIR)$(BINDIR)/wine-proton_hybrid\n"
@@ -123,6 +129,7 @@ install: _dirs install-launcher install-neutron install-wine install-hybrid inst
 
 _dirs:
 	install -d "$(DESTDIR)$(BINDIR)"
+	install -d "$(DESTDIR)$(PROTON_I_LIBDIR)"
 	install -d "$(DESTDIR)$(NEUTRON_LIBDIR)"
 	install -d "$(DESTDIR)$(NEUTRON_LIBDIR)/patches"
 	install -d "$(DESTDIR)$(WINE_LIBDIR)"
@@ -174,6 +181,16 @@ install-wine: _dirs
 	    printf "  \033[1;32m+\033[0m $$dest\n"; \
 	fi
 
+# ── looni-proton-install ─────────────────────────────────────────────────────
+install-proton-install: _dirs
+	@printf "\033[1;36m── looni-proton-install\033[0m\n"
+	install -m 755 "$(PROTON_I)/$(PROTON_I_BIN)" \
+	    "$(DESTDIR)$(BINDIR)/proton-install"
+	@printf "  \033[1;32m+\033[0m $(DESTDIR)$(BINDIR)/proton-install\n"
+	install -m 755 "$(PROTON_I)/$(PROTON_I_BIN)" \
+	    "$(DESTDIR)$(PROTON_I_LIBDIR)/$(PROTON_I_BIN)"
+	@printf "  \033[1;32m+\033[0m $(DESTDIR)$(PROTON_I_LIBDIR)/$(PROTON_I_BIN)\n"
+
 # ── looni-build launcher ─────────────────────────────────────────────────────
 install-launcher: _dirs
 	@printf "\033[1;36m── looni-build launcher\033[0m\n"
@@ -222,14 +239,15 @@ _setup-path:
 # ── uninstall ─────────────────────────────────────────────────────────────────
 uninstall:
 	@printf "\033[1;33mRemoving looni-build from %s ...\033[0m\n" "$(DESTDIR)$(PREFIX)"
-	@for cmd in looni-build neutron-builder wine-builder wine_toolz wine_install_mgr wine-proton_hybrid; do \
+	@for cmd in looni-build neutron-builder proton-install wine-builder wine_toolz wine_install_mgr wine-proton_hybrid; do \
 	    f="$(DESTDIR)$(BINDIR)/$$cmd"; \
 	    [ -f "$$f" ] && { rm -f "$$f"; printf "  \033[1;31m-\033[0m $$f\n"; } || true; \
 	done
 	@for d in "$(DESTDIR)$(NEUTRON_LIBDIR)" \
 	          "$(DESTDIR)$(WINE_LIBDIR)" \
 	          "$(DESTDIR)$(HYBRID_LIBDIR)" \
-	          "$(DESTDIR)$(TOOLZ_LIBDIR)"; do \
+	          "$(DESTDIR)$(TOOLZ_LIBDIR)" \
+	          "$(DESTDIR)$(PROTON_I_LIBDIR)"; do \
 	    [ -d "$$d" ] && { rm -rf "$$d"; printf "  \033[1;31m-\033[0m $$d/\n"; } || true; \
 	done
 	@printf "\n\033[1;32m ✓  Uninstall complete.\033[0m\n"
@@ -261,10 +279,11 @@ help:
 	@printf "\033[1mTargets:\033[0m\n"
 	@printf "  \033[1;36mmake install\033[0m           Install all sub-projects + add PATH to ~/.bashrc\n"
 	@printf "  \033[1;36mmake install-launcher\033[0m  looni-build launcher only\n"
-	@printf "  \033[1;36mmake install-neutron\033[0m    looni-neutron_builder only\n"
-	@printf "  \033[1;36mmake install-wine\033[0m      looni-wine_builder only\n"
-	@printf "  \033[1;36mmake install-hybrid\033[0m    looni-wine-proton_hybrid_builder only\n"
-	@printf "  \033[1;36mmake install-toolz\033[0m     looni-winetoolz only\n"
+	@printf "  \033[1;36mmake install-neutron\033[0m         looni-neutron_builder only\n"
+	@printf "  \033[1;36mmake install-proton-install\033[0m  looni-proton-install only\n"
+	@printf "  \033[1;36mmake install-wine\033[0m            looni-wine_builder only\n"
+	@printf "  \033[1;36mmake install-hybrid\033[0m          looni-wine-proton_hybrid_builder only\n"
+	@printf "  \033[1;36mmake install-toolz\033[0m           looni-winetoolz only\n"
 	@printf "  \033[1;36mmake uninstall\033[0m         Remove all installed files (asks about ~/.bashrc)\n"
 	@printf "  \033[1;36mmake help\033[0m              Show this message\n"
 	@printf "\n\033[1mVariables:\033[0m\n"

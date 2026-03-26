@@ -21,6 +21,7 @@ _find_tool() {
     case "$name" in
         wine-builder)       _bin="${SCRIPT_DIR}/looni-wine_builder/wine-builder.sh" ;;
         neutron-builder)    _bin="${SCRIPT_DIR}/looni-neutron_builder/neutron-builder.sh" ;;
+        proton-install)     _bin="${SCRIPT_DIR}/looni-proton-install/proton-install.sh" ;;
         wine-proton_hybrid) _bin="${SCRIPT_DIR}/looni-wine-proton_hybrid_builder/wine-proton_hybrid-v1.0.0.sh" ;;
         wine_toolz)         _bin="${SCRIPT_DIR}/looni-winetoolz/wine_toolz.sh" ;;
         wine_install_mgr)   _bin="${SCRIPT_DIR}/looni-winetoolz/modules/shared_lib/wine_install_manager.sh" ;;
@@ -31,6 +32,7 @@ _find_tool() {
     #    (SCRIPT_DIR is bin/; strip /bin to get prefix, then look in lib/)
     local _lib="${SCRIPT_DIR%/bin}/lib"
     case "$name" in
+        proton-install)   _bin="${_lib}/looni-proton-install/proton-install.sh" ;;
         wine_toolz)       _bin="${_lib}/looni-winetoolz/wine_toolz.sh" ;;
         wine_install_mgr) _bin="${_lib}/looni-winetoolz/modules/shared_lib/wine_install_manager.sh" ;;
     esac
@@ -83,18 +85,20 @@ declare -A TOOL_KEY TOOL_DESC
 TOOL_KEY=(
     [1]="wine-builder"
     [2]="neutron-builder"
-    [3]="wine-proton_hybrid"
-    [4]="wine_toolz"
-    [5]="wine_install_mgr"
+    [3]="proton-install"
+    [4]="wine-proton_hybrid"
+    [5]="wine_toolz"
+    [6]="wine_install_mgr"
 )
 TOOL_DESC=(
     [1]="🛠  wine-builder          — build Wine from source (mainline, staging, TKG, Valve…)"
     [2]="🎮  neutron-builder       — build Proton (Valve, Kron4ek, GE, TKG variants…)"
-    [3]="⇌   wine-proton_hybrid    — merge any Wine build over a Proton base"
-    [4]="⚙   wine_toolz            — GUI Wine toolkit (DXVK, prefixes, runtimes…)"
-    [5]="📦  wine_install_mgr      — install, switch, and manage custom Wine builds"
+    [3]="🚀  proton-install        — download & deploy GE-Proton / pre-built Proton to Steam"
+    [4]="⇌   wine-proton_hybrid    — merge any Wine build over a Proton base"
+    [5]="⚙   wine_toolz            — GUI Wine toolkit (DXVK, prefixes, runtimes…)"
+    [6]="📦  wine_install_mgr      — install, switch, and manage custom Wine builds"
 )
-TOOL_KEYS=( wine-builder neutron-builder wine-proton_hybrid wine_toolz wine_install_mgr )
+TOOL_KEYS=( wine-builder neutron-builder proton-install wine-proton_hybrid wine_toolz wine_install_mgr )
 
 # ── Launch + menu loop ────────────────────────────────────────────────────────
 _launch() {
@@ -159,14 +163,14 @@ while true; do
     else
         # Fallback: numbered menu
         printf "  ${C_B}Select a tool:${C_R}\n\n"
-        for idx in 1 2 3 4 5; do
+        for idx in 1 2 3 4 5 6; do
             printf "  ${C_CYN}%d)${C_R} %s\n" "$idx" "${TOOL_DESC[$idx]}"
         done
         printf "  ${C_CYN}q)${C_R}  Exit\n"
-        printf "\n  ${C_B}Choice [1-5, q]:${C_R} "
+        printf "\n  ${C_B}Choice [1-6, q]:${C_R} "
         read -r _choice
         case "$_choice" in
-            1|2|3|4|5) key="${TOOL_KEY[$_choice]}" ;;
+            1|2|3|4|5|6) key="${TOOL_KEY[$_choice]}" ;;
             q|Q|"")  printf "\n  ${C_DIM}Goodbye :3${C_R}\n\n"; exit 0 ;;
             *) printf "\n  ${C_MAG}Invalid choice.${C_R}\n\n"; continue ;;
         esac
