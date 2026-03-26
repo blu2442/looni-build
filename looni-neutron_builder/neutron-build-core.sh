@@ -744,7 +744,7 @@ else
 
     export CFLAGS="-I/usr/include/freetype2 -I/usr/include/wayland"
     export CPPFLAGS="-I/usr/include/freetype2 -I/usr/include/wayland"
-    export LDFLAGS="-L/usr/lib/i386-linux-gnu -L/usr/lib32 -L/lib/i386-linux-gnu"
+    export LDFLAGS="-L/usr/lib/i386-linux-gnu -L/usr/lib32 -L/lib/i386-linux-gnu -lm"
 
     msg2 "CC       = ${CC}"
     msg2 "CROSSCC  = ${CROSSCC}"
