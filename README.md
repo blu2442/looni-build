@@ -27,7 +27,7 @@ overrides through a zenity-based GUI. Or do it all from the CLI.
 ⠀⠀⠀⡟⡿⢿⡿⠀⠀⠀⠀⠀⠙⠀⠻⢯⢷⣼⠁⠁⠀⠀⠀⠀⠀⡄⡈⢆⠀
 ⠀⠀⠀⠀⡇⣿⡅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠦⠀⠀⠀⠀⠀⠀⡇⢹⢿⡀
 ⠀⠀⠀⠀⠁⠛⠓⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠼⠇⠁
-                looni-build v1.3.0
+                looni-build v1.4.0
 ```
 
 ---
@@ -201,14 +201,30 @@ neutron-builder --list                           # show installed Neutron builds
 | `ge-proton` | GE-Proton (GloriousEggroll) | proton-wine + GE's full gaming patch set (version picker) |
 | `kron4ek-tkg` | Kron4ek wine-tkg | Mainline + Staging + TKG patches + ntsync |
 
-#### GE Neutron (GloriousEggroll)
+#### GE Neutron (GloriousEggroll) — NEW in v1.4.0
 
 Select `ge-proton` as your source to build a **GE Neutron** — proton-wine with
 GloriousEggroll's full gaming patch set applied automatically. The version picker
 shows GE release tags (GE-Proton9-20, etc.) and resolves the matching proton-wine
-branch. The builder clones `proton-ge-custom`, runs GE's `protonprep.sh` to
-apply all patches (Media Foundation, FSR, game-specific fixes, etc.), then compiles
-through the normal Neutron pipeline.
+branch. The builder clones `proton-ge-custom`, runs GE's `protonprep-valve-staging.sh`
+to apply all patches, then compiles through the normal Neutron pipeline.
+
+**What GE's patches include:**
+- Wine-Staging (with GE's curated exclusions for Proton compatibility)
+- Wine-Wayland patches
+- ntsync hotfixes
+- FSR (FidelityFX Super Resolution) fullscreen hack
+- NVIDIA Reflex / VK_NV_low_latency2 support
+- Media Foundation / GStreamer codec support (in-game cutscenes, video playback)
+- Game-specific fixes: Star Citizen, Dragon Age Inquisition, Assetto Corsa, PSO2,
+  Le Mans Ultimate, Ghost of Tsushima (PSN login), Clannad, and more
+- Anti-cheat compatibility: EAC host block, hidden Wine exports
+- Performance: fast audio polling, ALSA channel override, exe relocation
+- DLSS upgrade patches, OpenXR support
+- Unity crash hotfix, D2D crash fix, write-watches spam reduction
+
+**First successful build:** 95,182 lines compiled, 106 files patched, 576 x64 DLLs +
+572 x86 DLLs, 1.5 GB packaged — zero build errors.
 
 ```bash
 neutron-builder --source ge-proton                    # interactive GE release picker
@@ -216,6 +232,10 @@ neutron-builder --source ge-proton --branch GE-Proton9-20  # pin to specific rel
 ```
 
 The resulting build appears in Steam as `looni-ge-neutron-<version>`.
+
+**Post-patch fixups:** The builder automatically fixes known incompatibilities between
+GE's patches and certain proton-wine branches (e.g., `close_inproc_sync_obj` →
+`NtClose` in ntdll thread suspension code).
 
 #### DXVK & VKD3D-Proton Options
 
@@ -358,8 +378,9 @@ manual setup step.
 #### Patch System (NEW in v1.3.0)
 
 neutron-builder includes a full patch system (`neutron-patcher.sh`) that applies
-curated patch groups to the Wine source between fetch and configure. Patches are
-sourced from GE-Proton and the community, targeting Wine 11.x / proton-wine.
+patch groups to the Wine source between fetch and configure. For GE-Proton's
+gaming patches, use `--source ge-proton` instead — it runs GE's own patch script
+automatically. The patch system below is for your own custom patches.
 
 `patches/` ships with an empty `custom/` template — no pre-built patches are
 included. Drop your own `.patch` files into `custom/` (or any new subdirectory)
