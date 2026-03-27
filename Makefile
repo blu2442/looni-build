@@ -68,6 +68,9 @@ NEUTRON_LIBS := \
     neutron-dxvk-build.sh \
     neutron-vkd3d-build.sh \
     neutron-package.sh \
+    neutron-patcher.sh \
+    dxvk.conf \
+    vkd3d-proton.conf \
     spinner.sh \
     ntsync.h \
     deps-neutron-tkg \
@@ -171,6 +174,11 @@ install-neutron: _dirs
 	    install -m 755 "$$src" "$(DESTDIR)$(NEUTRON_LIBDIR)/$$f"; \
 	    printf "  \033[1;32m+\033[0m $(DESTDIR)$(NEUTRON_LIBDIR)/$$f\n"; \
 	done
+	@if [ -d "$(NEUTRON)/patches" ]; then \
+	    cp -r "$(NEUTRON)/patches" "$(DESTDIR)$(NEUTRON_LIBDIR)/patches"; \
+	    printf "  \033[1;32m+\033[0m $(DESTDIR)$(NEUTRON_LIBDIR)/patches/ (%s groups)\n" \
+	        "$$(find "$(NEUTRON)/patches" -mindepth 1 -maxdepth 1 -type d | wc -l)"; \
+	fi
 	@src="$(NEUTRON)/$(NEUTRON_CFG)"; dest="$(DESTDIR)$(CFGDIR)/$(NEUTRON_CFG)"; \
 	[ -f "$$src" ] || exit 0; \
 	if [ -f "$$dest" ]; then \
