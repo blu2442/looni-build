@@ -2061,18 +2061,12 @@ if [ "$WINE_SOURCE_KEY" = "ge-proton" ]; then
 
         # protonprep does 'pushd wine' — create a symlink so it finds our tree
         _ge_wine_link="${GE_CACHE_DIR}/wine"
-        if [ -L "$_ge_wine_link" ]; then
-            rm -f "$_ge_wine_link"
-        elif [ -d "$_ge_wine_link" ]; then
-            mv "$_ge_wine_link" "${_ge_wine_link}.orig-submodule"
-        fi
+        rm -rf "$_ge_wine_link"
         ln -sf "$WINE_SOURCE_DIR" "$_ge_wine_link"
 
         # Clone wine-staging — protonprep applies staging patches with exclusions
         _ge_staging_link="${GE_CACHE_DIR}/wine-staging"
-        if [ -L "$_ge_staging_link" ]; then
-            rm -f "$_ge_staging_link"
-        fi
+        rm -rf "$_ge_staging_link"
         _ge_staging_dir="${SRC_ROOT}/wine-staging-ge"
         if [ ! -d "${_ge_staging_dir}/.git" ]; then
             msg2 "Cloning wine-staging for GE patch application…"
@@ -2130,8 +2124,8 @@ if [ "$WINE_SOURCE_KEY" = "ge-proton" ]; then
         fi
 
         # Clean up symlinks (leave dummy dirs, they're harmless)
-        rm -f "$_ge_wine_link"
-        rm -f "$_ge_staging_link"
+        rm -rf "$_ge_wine_link"
+        rm -rf "$_ge_staging_link"
     elif [ -d "$_ge_patches_dir" ]; then
         # No protonprep.sh — try applying .patch files directly
         msg "No protonprep.sh found — applying GE .patch files directly"
