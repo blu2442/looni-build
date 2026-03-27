@@ -27,7 +27,7 @@ overrides through a zenity-based GUI. Or do it all from the CLI.
 ⠀⠀⠀⡟⡿⢿⡿⠀⠀⠀⠀⠀⠙⠀⠻⢯⢷⣼⠁⠁⠀⠀⠀⠀⠀⡄⡈⢆⠀
 ⠀⠀⠀⠀⡇⣿⡅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠦⠀⠀⠀⠀⠀⠀⡇⢹⢿⡀
 ⠀⠀⠀⠀⠁⠛⠓⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠼⠇⠁
-                looni-build v1.2.0
+                looni-build v1.3.0
 ```
 
 ---
@@ -180,6 +180,11 @@ neutron-builder                                  # interactive wizard
 neutron-builder --source proton-wine             # Valve proton-wine (branch picker)
 neutron-builder --source proton-wine --branch proton_9.0
 neutron-builder --source kron4ek-tkg             # Kron4ek wine-tkg + ntsync
+neutron-builder --patches all                    # apply all patch groups
+neutron-builder --patches performance,game-fixes # apply specific groups
+neutron-builder --sniper                         # enable Steam Runtime Sniper container
+neutron-builder --dxvk dxvk-release              # download pre-built DXVK (skip compile)
+neutron-builder --vkd3d vkd3d-proton-release     # download pre-built VKD3D-Proton
 neutron-builder --dxvk-only                      # rebuild DXVK only, skip Wine
 neutron-builder --vkd3d-only                     # rebuild VKD3D-Proton only
 neutron-builder --reinstall-components           # re-package without rebuilding
@@ -198,13 +203,15 @@ neutron-builder --list                           # show installed Neutron builds
 
 | DXVK Key | Description |
 |----------|-------------|
-| `dxvk` | Standard DXVK — D3D9/10/11 → Vulkan (default) |
-| `dxvk-async` | DXVK + async pipeline compilation |
+| `dxvk` | Standard DXVK — D3D9/10/11 → Vulkan, compiled from source (default) |
+| `dxvk-async` | DXVK + async pipeline compilation, compiled from source |
+| `dxvk-release` | Pre-built DXVK DLLs from GitHub releases (fastest, no compile) |
 | `none` | Skip DXVK (falls back to WineD3D) |
 
 | VKD3D Key | Description |
 |-----------|-------------|
-| `vkd3d-proton` | VKD3D-Proton — D3D12 → Vulkan (default) |
+| `vkd3d-proton` | VKD3D-Proton — D3D12 → Vulkan, compiled from source (default) |
+| `vkd3d-proton-release` | Pre-built VKD3D-Proton DLLs from GitHub releases (fastest) |
 | `none` | Skip VKD3D-Proton (D3D12 games won't work) |
 
 #### Full CLI Reference
@@ -232,6 +239,9 @@ neutron-builder --list                           # show installed Neutron builds
 | `--dxvk-only` | Rebuild DXVK only (skip Wine) |
 | `--vkd3d-only` | Rebuild VKD3D-Proton only (skip Wine) |
 | `--reinstall-components` | Re-package without rebuilding |
+| `--patches GROUPS` | Patch groups to apply (`all`, `none`, or comma-separated names) |
+| `--patches-dir PATH` | Alternate patches directory |
+| `--sniper` | Enable Steam Runtime Sniper mode (container isolation) |
 | `--cfg PATH` | Alternate `neutron-customization.cfg` |
 | `--list` | Show installed Neutron builds |
 | `--dry-run` | Print planned actions |
@@ -255,12 +265,13 @@ VKD3D-Proton builds produced by neutron-builder are compiled against bundled hea
 resulting `.dll` files are fully standalone — no `libstdc++-6.dll` or other MinGW
 runtime DLLs needed at runtime.
 
-**toolmanifest.vdf — host-native launch, no SLR container.** The generated
-`toolmanifest.vdf` deliberately omits `require_tool_appid "1391110"` (the Steam Linux
-Runtime Sniper container). This means neutron packages run **host-native**: they use
-the host system's Vulkan drivers, libraries, and kernel features directly. No SLR
-container download required, and ntsync / fsync / esync work without any container
-workarounds.
+**toolmanifest.vdf — host-native or Sniper container.** By default, the generated
+`toolmanifest.vdf` omits `require_tool_appid "1391110"`, so neutron packages run
+**host-native** — direct access to Vulkan drivers, kernel features, and ntsync/fsync.
+Pass `--sniper` to enable **Steam Runtime Sniper mode** instead, which adds
+`require_tool_appid "1391110"` and runs the package inside Steam's SteamOS 3.x
+container for SteamDeck-like isolation. The interactive builder offers this as an
+fzf picker during the build wizard.
 
 #### The neutron Python Launcher
 
@@ -291,6 +302,20 @@ manual env var required:
 - **esync** — enabled via `WINEESYNC=1` when only esync is available.
 - The user's externally-set values are always respected (`setdefault` is used).
 
+**Runtime gaming optimizations.** The launcher automatically applies performance
+tuning that you'd otherwise have to set manually:
+
+- **DXVK async** — `DXVK_ASYNC=1` enabled by default for stutter-free shader compilation.
+- **Shipped `dxvk.conf`** — auto-loaded from the package's `files/` directory with
+  async shaders, state cache, and sane defaults. Override with `DXVK_CONFIG_FILE`.
+- **AMD GPU hints** — `RADV_PERFTEST=gpl,nggc,sam` for graphics pipeline library,
+  NGG culling, and Smart Access Memory on RADV.
+- **GameMode integration** — auto-detects [Feral GameMode](https://github.com/FeralInteractive/gamemode)
+  and wraps the game process with `gamemoderun` for CPU governor and nice priority
+  optimization. Controlled via `NEUTRON_GAMEMODE=auto|1|0`.
+- **MangoHud passthrough** — set `MANGOHUD=1` in Steam launch options and it just
+  works. The launcher sets `MANGOHUD_DLSYM=1` for proper hooking.
+
 **Prefix initialization on first launch.** When a game runs for the first time in a
 fresh prefix (no `system.reg` present), `neutron` automatically:
 
@@ -312,27 +337,67 @@ manual setup step.
   `vrclient=disabled`) — prevents assertion crashes in games that have OpenVR
   bundled even when not using VR.
 
-#### lsteamclient — Steam API Bridge
+#### Patch System (NEW in v1.3.0)
 
-`lsteamclient.dll` is a proprietary Steam API bridge DLL that Valve ships with their
-Proton builds. It allows Wine to talk to the real Steam client running on the host.
-Without it, any game that calls `SteamAPI_Init()` hangs at startup with a black
-screen because Wine falls back to a stub implementation.
+neutron-builder includes a full patch system (`neutron-patcher.sh`) that applies
+curated patch groups to the Wine source between fetch and configure. Patches are
+sourced from GE-Proton and the community, targeting Wine 11.x / proton-wine.
 
-Community Wine builds like kron4ek-tkg do not include `lsteamclient.dll` (it is
-proprietary). neutron-builder **auto-bootstraps** it: during the package assembly
-step, it searches for Proton Experimental in common Steam library paths and copies
-the four needed files into the Wine build:
+**Shipped patch groups (21 patches across 6 groups):**
 
+| Group | Priority | Patches | Description |
+|-------|----------|---------|-------------|
+| `ntsync` | 5 | 1 | NT sync thread suspension fix |
+| `performance` | 10 | 6 | NVIDIA low-latency, exe relocation, de-steamify, fast audio, write-watch downgrade |
+| `fullscreen-hack` | 20 | 1 | AMD FSR upscaler + borderless fullscreen hack |
+| `mouse-fixes` | 25 | 1 | Env var to disable WM decorations |
+| `game-fixes` | 30 | 8 | Anti-cheat compat (hide Wine exports), EAC timeout, D2D crash, input fixes |
+| `media-foundation` | 40 | 4 | GStreamer video playback, cutscenes, media converter |
+
+**Usage:**
+
+```bash
+neutron-builder --patches all                    # apply everything
+neutron-builder --patches performance,game-fixes # specific groups
+neutron-builder --patches none                   # skip patching
+neutron-builder                                  # interactive fzf multi-picker
 ```
-lib/wine/x86_64-windows/lsteamclient.dll   (PE, 64-bit)
-lib/wine/x86_64-unix/lsteamclient.so       (Unix bridge, 64-bit)
-lib/wine/i386-windows/lsteamclient.dll     (PE, 32-bit)
-lib/wine/i386-unix/lsteamclient.so         (Unix bridge, 32-bit)
+
+**Adding custom patches:** Drop `.patch` files into a new subdirectory under
+`patches/` — the patcher auto-discovers any directory with `.patch` files. Add an
+optional `group.conf` for metadata:
+
+```ini
+description="My custom patches for game X"
+priority=50
+sources=proton-wine,kron4ek-tkg
+conflicts=other-group
+requires=performance
 ```
 
-If Proton Experimental is not installed, a warning is printed. Install it via Steam
-and rebuild the package to pick it up automatically.
+A `series` file (one filename per line) controls application order. Without it,
+patches are applied in sorted filename order (`0001-*.patch` convention).
+
+The patcher creates a git checkpoint before applying, so you can revert with
+`git checkout neutron-pre-patch-<timestamp>` in the Wine source directory.
+
+#### Steam Component Bootstrap
+
+neutron-builder auto-bootstraps proprietary Steam components during packaging.
+It searches local Proton installs (Hotfix, Experimental, 9.0, 8.0, and any
+`Proton*` directory) across all Steam library roots. If no local Proton is found,
+it **downloads from [Kron4ek/proton-archive](https://github.com/Kron4ek/proton-archive)**
+(defaults to proton-10.0-4).
+
+**Components bootstrapped:**
+
+| Component | Files | Purpose |
+|-----------|-------|---------|
+| `lsteamclient` | `.dll` (PE) + `.so` (Unix bridge), 32+64-bit | Steam API bridge — without it, Steamworks games hang at startup |
+| `steam_helper.exe` | 32+64-bit | Steam overlay helper / steamwebhelper bridge |
+| `steam.exe` | 32+64-bit | Steam client stub expected by some games |
+| `gameoverlayrenderer.so` | 32+64-bit | In-game Steam overlay (Shift+Tab) |
+| `steamclient.dll` | 32+64-bit | Steam client library |
 
 Additional Steam library paths can be provided via the `STEAM_LIBRARY_PATHS`
 environment variable (newline-separated).
@@ -468,31 +533,36 @@ with `proton-install --deploy <path>` or the interactive `proton-install` menu.
 
 ### 🚀 neutron-install — looni-neutron-install
 
-Deploys locally-built **Neutron packages** (from neutron-builder) into Steam's
-`compatibilitytools.d/` so they appear in the compatibility tool dropdown. This is the
-installer for neutron-builder's output — no download functionality, just local deploys.
+**Rewritten in v1.3.0** as a full CLI package manager for Neutron builds. Installs,
+deploys to Steam, sets up as system Wine, switches active versions, and manages
+installed Neutron packages — all with fzf pickers and numbered fallbacks.
 
 ```bash
-neutron-install                             # interactive menu
-neutron-install --deploy PATH               # deploy a specific build directory
-neutron-install --list                      # list installed compatibility tools
-neutron-install --remove NAME               # remove an installed tool
-neutron-install --compat-dir DIR            # override compatibilitytools.d path
-neutron-install --dry-run                   # show planned actions
+neutron-install                             # interactive menu (7 actions)
+neutron-install install                     # install from builder output / dir / tarball
+neutron-install deploy                      # deploy to Steam compatibilitytools.d
+neutron-install system-wine                 # install as system Wine (symlinks to ~/.local/bin)
+neutron-install switch                      # switch active Neutron (swap symlinks)
+neutron-install list                        # list managed installs with metadata
+neutron-install remove                      # remove one or more installs
+neutron-install info                        # disk usage, version, architecture details
 ```
 
-#### CLI Reference
+#### Features
 
-| Flag | Description |
-|------|-------------|
-| `--deploy PATH` | Deploy a Neutron build directory to compatibilitytools.d |
-| `--list` | List installed compatibility tools |
-| `--remove NAME` | Remove a named compatibility tool |
-| `--compat-dir DIR` | Override the auto-detected compatibilitytools.d path |
-| `--dry-run` | Print planned actions without executing |
+| Action | Description |
+|--------|-------------|
+| **Install** | Install from neutron-builder output, a directory, or a tarball |
+| **Deploy** | Copy to `~/.steam/*/compatibilitytools.d/` for Steam |
+| **System Wine** | Symlink Wine binaries + `neutron` launcher to `~/.local/bin/` |
+| **Switch** | Change which install is the active system Wine |
+| **List** | Show all managed installs with version, date, active status |
+| **Remove** | Remove installs and clean up symlinks |
+| **Info** | Disk usage, Wine version, source, contents breakdown |
 
-The interactive menu scans `~/.local/share/looni-neutron_builder/buildz/install/` for
-deployable packages (the same directory neutron-builder outputs to).
+**Managed installs** go to `~/.local/share/looni-neutron-installs/<name>/` with
+`.looni-meta` metadata. Symlinks include all Wine binaries (`wine`, `wine64`,
+`wineserver`, `wineboot`, `winecfg`, etc.) plus the `neutron` Python launcher.
 
 ---
 
@@ -674,7 +744,7 @@ Run a full health check on any prefix:
 
 ### 📦 Wine Install Manager
 
-**NEW in v1.2.0** — a dedicated manager for installing, switching between, and
+A dedicated manager for installing, switching between, and
 uninstalling custom Wine builds. Accessible from both the main `looni-build` menu
 and winetoolz's Wine category.
 
@@ -737,12 +807,21 @@ looni-build/
 │   ├── neutron-build-core.sh                   Build engine
 │   ├── neutron-dxvk-build.sh                   DXVK builder (meson/ninja, static MinGW)
 │   ├── neutron-vkd3d-build.sh                  VKD3D-Proton builder
-│   ├── neutron-package.sh                      Steam package assembler (neutron launcher,
-│   │                                           toolmanifest.vdf, lsteamclient bootstrap)
+│   ├── neutron-package.sh                      Steam package assembler (launcher, bootstrap,
+│   │                                           toolmanifest, dxvk.conf, Steam components)
+│   ├── neutron-patcher.sh                      Patch system engine (fzf multi-picker)
+│   ├── dxvk.conf                               Shipped DXVK config (async, state cache)
+│   ├── vkd3d-proton.conf                       Shipped VKD3D-Proton config reference
 │   ├── spinner.sh                              Progress animation
 │   ├── ntsync.h                                Kernel header for ntsync support
 │   ├── neutron-customization.cfg               Build config
-│   ├── patches/                                Drop .patch/.diff files here
+│   ├── patches/                                Curated patch groups (21 patches, 6 groups)
+│   │   ├── ntsync/                             NT sync fixes
+│   │   ├── performance/                        NVIDIA low-latency, exe reloc, audio, de-steamify
+│   │   ├── fullscreen-hack/                    AMD FSR upscaler + borderless fullscreen
+│   │   ├── mouse-fixes/                        WM decoration control
+│   │   ├── game-fixes/                         Anti-cheat, EAC, D2D, input fixes
+│   │   └── media-foundation/                   GStreamer video/cutscene support
 │   └── deps-neutron-tkg                        TKG dependency list
 │
 ├── looni-proton_builder/
@@ -834,6 +913,15 @@ explicitly `make install PREFIX=/usr/local`.
 │   ├── buildz/
 │   │   └── install/            Completed Proton builds (GE / TKG)
 │   └── src/                    Git clones (proton-ge-custom, wine-tkg-git)
+│
+├── looni-neutron-installs/     Managed Neutron installations (neutron-install)
+│   ├── my-neutron/
+│   │   ├── files/              Wine build + DXVK + VKD3D + Steam components
+│   │   ├── neutron             Python launcher
+│   │   ├── compatibilitytool.vdf
+│   │   ├── toolmanifest.vdf
+│   │   └── .looni-meta
+│   └── ...
 │
 └── looni-wine-installs/        Managed Wine installations (Wine Install Manager)
     ├── wine-staging-10.5/
