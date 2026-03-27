@@ -500,7 +500,7 @@ After a successful build:
 
 ```bash
 cp -r ~/.local/share/looni-neutron_builder/buildz/install/<name> \
-      ~/.steam/debian-installation/compatibilitytools.d/
+      ~/.steam/steam/compatibilitytools.d/
 ```
 
 Or use `neutron-install --deploy <path>` (see below) to copy and set permissions in
@@ -744,7 +744,7 @@ wine_toolz
 Every module that needs a Wine binary uses `wt_select_wine_bin`, which auto-scans:
 
 1. Custom Wine builds under `~/wine-custom/buildz/`
-2. Proton/GE-Proton in `~/.steam/debian-installation/compatibilitytools.d/`
+2. Proton/GE-Proton in `~/.steam/steam/compatibilitytools.d/`
 3. System `wine` / `wine64` on `$PATH`
 4. Manual browse fallback
 

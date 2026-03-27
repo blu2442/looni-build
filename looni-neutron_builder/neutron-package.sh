@@ -823,7 +823,7 @@ Built by **looni-neutron_builder**.
 Copy this directory into Steam's compatibility tools folder and restart Steam:
 
 \`\`\`bash
-cp -r "$(basename "$NEUTRON_PACKAGE_DIR")" ~/.local/share/Steam/compatibilitytools.d/
+cp -r "$(basename "$NEUTRON_PACKAGE_DIR")" ~/.steam/steam/compatibilitytools.d/
 \`\`\`
 
 Then open a game's Properties → Compatibility and select **${_display_name}**.
@@ -862,5 +862,5 @@ ok "Package size: ${_pkg_size}"
 
 sep "Packaging complete"
 ok "Proton package ready at: ${NEUTRON_PACKAGE_DIR}"
-msg2 "To install:  cp -r ${NEUTRON_PACKAGE_DIR} ~/.local/share/Steam/compatibilitytools.d/"
+msg2 "To install:  cp -r ${NEUTRON_PACKAGE_DIR} ~/.steam/steam/compatibilitytools.d/"
 msg2 "Then restart Steam and enable in game Properties → Compatibility."

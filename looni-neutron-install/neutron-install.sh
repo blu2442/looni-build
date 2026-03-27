@@ -419,10 +419,11 @@ _clear_active() {
 # ══════════════════════════════════════════════════════════════════════════════
 
 _COMPAT_CANDIDATES=(
-    "${HOME}/.steam/root/compatibilitytools.d"
     "${HOME}/.steam/steam/compatibilitytools.d"
+    "${HOME}/.steam/root/compatibilitytools.d"
     "${HOME}/.steam/debian-installation/compatibilitytools.d"
     "${HOME}/.local/share/Steam/compatibilitytools.d"
+    "${HOME}/.var/app/com.valvesoftware.Steam/.local/share/Steam/compatibilitytools.d"
 )
 
 _find_compat_dir() {
@@ -449,7 +450,7 @@ _resolve_compat_dir() {
         ok "compatibilitytools.d: ${COMPAT_TOOLS_DIR}"
         return
     fi
-    local default="${HOME}/.steam/root/compatibilitytools.d"
+    local default="${HOME}/.steam/steam/compatibilitytools.d"
     if [[ "$NONINTERACTIVE" -eq 1 ]]; then
         warn "Could not find Steam's compatibilitytools.d — creating ${default}"
         mkdir -p "$default"

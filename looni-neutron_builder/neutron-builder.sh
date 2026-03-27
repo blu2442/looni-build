@@ -315,7 +315,7 @@ ${C_B}Steam installation:${C_R}
   After a successful build, copy the package directory from:
     buildz/install/<build-name>/
   into:
-    ~/.local/share/Steam/compatibilitytools.d/
+    ~/.steam/steam/compatibilitytools.d/
   Then restart Steam and enable your custom Proton in the game's
   Compatibility settings (Properties → Compatibility).
 USAGE
@@ -1626,7 +1626,7 @@ print_summary() {
 
     printf "\n  ${C_B}To use with Steam:${C_R}\n"
     printf "    cp -r %s\n" "$install_prefix"
-    printf "       ~/.local/share/Steam/compatibilitytools.d/\n"
+    printf "       ~/.steam/steam/compatibilitytools.d/\n"
     printf "    Then restart Steam and enable in game Properties → Compatibility.\n"
     printf "\n"
 }
