@@ -2046,43 +2046,60 @@ if [ "$WINE_SOURCE_KEY" = "ge-proton" ]; then
     # protonprep.sh from within it.
     _ge_patches_dir="${GE_CACHE_DIR}/patches"
 
-    if [ -f "${_ge_patches_dir}/protonprep.sh" ]; then
-        msg "Applying GE patches via protonprep.sh…"
+    # Find the protonprep script — GE names it differently across releases
+    _ge_prep=""
+    for _candidate in \
+        "${_ge_patches_dir}/protonprep-valve-staging.sh" \
+        "${_ge_patches_dir}/protonprep.sh" \
+        "${_ge_patches_dir}/protonprep-nofshack.sh"; do
+        [ -f "$_candidate" ] && { _ge_prep="$_candidate"; break; }
+    done
+
+    if [ -n "$_ge_prep" ]; then
+        msg "Applying GE patches via $(basename "$_ge_prep")…"
         msg2 "This applies GE's full gaming patch set on top of proton-wine"
 
-        # protonprep.sh does 'cd wine' — create a symlink so it finds our tree
+        # protonprep does 'pushd wine' — create a symlink so it finds our tree
         _ge_wine_link="${GE_CACHE_DIR}/wine"
         if [ -L "$_ge_wine_link" ]; then
             rm -f "$_ge_wine_link"
         elif [ -d "$_ge_wine_link" ]; then
-            # Real submodule checkout — move it aside
             mv "$_ge_wine_link" "${_ge_wine_link}.orig-submodule"
         fi
         ln -sf "$WINE_SOURCE_DIR" "$_ge_wine_link"
 
-        # Also create wine-staging symlink if GE's script expects it
+        # Clone wine-staging — protonprep applies staging patches with exclusions
         _ge_staging_link="${GE_CACHE_DIR}/wine-staging"
-        if [ ! -e "$_ge_staging_link" ]; then
-            # Clone wine-staging for GE's protonprep (it applies staging patches)
-            _ge_staging_dir="${SRC_ROOT}/wine-staging-ge"
-            if [ ! -d "${_ge_staging_dir}/.git" ]; then
-                msg2 "Cloning wine-staging for GE patch application…"
-                run git clone --depth=1 \
-                    "https://github.com/wine-staging/wine-staging.git" \
-                    "$_ge_staging_dir"
-            fi
-            ln -sf "$_ge_staging_dir" "$_ge_staging_link"
+        if [ -L "$_ge_staging_link" ]; then
+            rm -f "$_ge_staging_link"
         fi
+        _ge_staging_dir="${SRC_ROOT}/wine-staging-ge"
+        if [ ! -d "${_ge_staging_dir}/.git" ]; then
+            msg2 "Cloning wine-staging for GE patch application…"
+            run git clone --depth=1 \
+                "https://github.com/wine-staging/wine-staging.git" \
+                "$_ge_staging_dir"
+        fi
+        ln -sf "$_ge_staging_dir" "$_ge_staging_link"
 
-        # Run protonprep.sh from the GE repo root
+        # Create dummy dirs for components we don't use (protonprep resets them)
+        for _dummy in dxvk vkd3d-proton dxvk-nvapi; do
+            _dummy_dir="${GE_CACHE_DIR}/${_dummy}"
+            if [ ! -d "$_dummy_dir" ]; then
+                mkdir -p "$_dummy_dir"
+                ( cd "$_dummy_dir" && git init -q && git commit --allow-empty -m "dummy" -q ) 2>/dev/null || true
+            fi
+        done
+
         _ge_patch_log="${BUILD_RUN_DIR}/ge-protonprep.log"
+        msg2 "Script: $(basename "$_ge_prep")"
         msg2 "Log: ${_ge_patch_log}"
 
         if [ "${DRY_RUN:-0}" -eq 1 ]; then
-            dim "  [dry-run] Would run protonprep.sh"
+            dim "  [dry-run] Would run $(basename "$_ge_prep")"
         else
             set +e
-            ( cd "$GE_CACHE_DIR" && bash patches/protonprep.sh ) \
+            ( cd "$GE_CACHE_DIR" && bash "$_ge_prep" ) \
                 > "$_ge_patch_log" 2>&1
             _ge_exit=$?
             set -e
@@ -2090,14 +2107,31 @@ if [ "$WINE_SOURCE_KEY" = "ge-proton" ]; then
             if [ "$_ge_exit" -eq 0 ]; then
                 ok "GE-Proton patches applied successfully"
             else
-                warn "protonprep.sh exited with code ${_ge_exit}"
+                warn "$(basename "$_ge_prep") exited with code ${_ge_exit}"
                 warn "Some GE patches may have failed — check: ${_ge_patch_log}"
                 msg2 "Continuing build (partial patches are usually fine)…"
             fi
+
+            # Show summary of what was applied
+            if [ -f "$_ge_patch_log" ]; then
+                _ge_applied=$(grep -c 'patching file\|WINE:' "$_ge_patch_log" 2>/dev/null || echo 0)
+                _ge_fails=$(grep -ciE 'FAILED|error|can.t find file' "$_ge_patch_log" 2>/dev/null || echo 0)
+                msg2 "Patch log: ~${_ge_applied} operations, ${_ge_fails} potential issues"
+            fi
         fi
 
-        # Clean up symlink
+        # ── Post-patch fixups for known GE/proton-wine incompatibilities ──
+        # GE's ntsync patch adds close_inproc_sync_obj() call but the function
+        # doesn't exist in all proton-wine branches. Replace with NtClose().
+        _thread_c="${WINE_SOURCE_DIR}/dlls/ntdll/unix/thread.c"
+        if [ -f "$_thread_c" ] && grep -q 'close_inproc_sync_obj' "$_thread_c"; then
+            sed -i 's/close_inproc_sync_obj( wait_handle );/NtClose( wait_handle );/' "$_thread_c"
+            ok "Post-patch fixup: close_inproc_sync_obj → NtClose"
+        fi
+
+        # Clean up symlinks (leave dummy dirs, they're harmless)
         rm -f "$_ge_wine_link"
+        rm -f "$_ge_staging_link"
     elif [ -d "$_ge_patches_dir" ]; then
         # No protonprep.sh — try applying .patch files directly
         msg "No protonprep.sh found — applying GE .patch files directly"
