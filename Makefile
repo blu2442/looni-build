@@ -175,9 +175,10 @@ install-neutron: _dirs
 	    printf "  \033[1;32m+\033[0m $(DESTDIR)$(NEUTRON_LIBDIR)/$$f\n"; \
 	done
 	@if [ -d "$(NEUTRON)/patches" ]; then \
-	    cp -r "$(NEUTRON)/patches" "$(DESTDIR)$(NEUTRON_LIBDIR)/patches"; \
+	    rm -rf "$(DESTDIR)$(NEUTRON_LIBDIR)/patches"; \
+	    cp -a "$(NEUTRON)/patches" "$(DESTDIR)$(NEUTRON_LIBDIR)/patches"; \
 	    printf "  \033[1;32m+\033[0m $(DESTDIR)$(NEUTRON_LIBDIR)/patches/ (%s groups)\n" \
-	        "$$(find "$(NEUTRON)/patches" -mindepth 1 -maxdepth 1 -type d | wc -l)"; \
+	        "$$(find "$(DESTDIR)$(NEUTRON_LIBDIR)/patches" -mindepth 1 -maxdepth 1 -type d | wc -l)"; \
 	fi
 	@src="$(NEUTRON)/$(NEUTRON_CFG)"; dest="$(DESTDIR)$(CFGDIR)/$(NEUTRON_CFG)"; \
 	[ -f "$$src" ] || exit 0; \
