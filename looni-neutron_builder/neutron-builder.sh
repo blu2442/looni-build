@@ -789,15 +789,22 @@ pick_wine_version() {
         return 0
     fi
 
+    # Temporarily disable pipefail — grep returns 1 when no lines match,
+    # which would make the whole pipeline fail under pipefail even when
+    # git ls-remote succeeds.  We check for empty output below instead.
+    set +o pipefail
+
     if [ "$ref_type" = "heads" ]; then
         # Valve proton-wine: branches named proton_X.Y
-        if ! raw_refs=$(
-                git ls-remote --heads --refs "$url" 2>/dev/null \
-                | awk '{print $2}' \
-                | sed 's|refs/heads/||' \
-                | grep -E '^proton_[0-9]+\.[0-9]' \
-                | sort -Vr
-            ); then
+        raw_refs=$(
+            git ls-remote --heads --refs "$url" 2>/dev/null \
+            | awk '{print $2}' \
+            | sed 's|refs/heads/||' \
+            | grep -E '^proton_[0-9]+\.[0-9]' \
+            | sort -Vr
+        ) || true
+        if [ -z "$raw_refs" ]; then
+            set -o pipefail
             warn "Could not fetch branch list — using default branch."
             return 0
         fi
@@ -811,23 +818,27 @@ pick_wine_version() {
             staging)     _tag_pattern='^v[0-9]+\.[0-9]' ;;
             *)           _tag_pattern='^wine-[0-9]+\.[0-9]' ;;
         esac
-        if ! raw_refs=$(
-                git ls-remote --tags --refs "$url" 2>/dev/null \
-                | awk '{print $2}' \
-                | sed 's|refs/tags/||' \
-                | grep -E "$_tag_pattern" \
-                | grep -v -- '-rc' \
-                | { case "$key" in
-                        # Only show 10.x+ tags — older 9.x tags lack configure.ac
-                        kron4ek-tkg) awk -F. '$1 >= 10' ;;
-                        *)           cat ;;
-                    esac; } \
-                | sort -Vr
-            ); then
+        raw_refs=$(
+            git ls-remote --tags --refs "$url" 2>/dev/null \
+            | awk '{print $2}' \
+            | sed 's|refs/tags/||' \
+            | grep -E "$_tag_pattern" \
+            | grep -v -- '-rc' \
+            | { case "$key" in
+                    # Only show 10.x+ tags — older 9.x tags lack configure.ac
+                    kron4ek-tkg) awk -F. '$1 >= 10' ;;
+                    *)           cat ;;
+                esac; } \
+            | sort -Vr
+        ) || true
+        if [ -z "$raw_refs" ]; then
+            set -o pipefail
             warn "Could not fetch tag list — using default branch."
             return 0
         fi
     fi
+
+    set -o pipefail
 
     while IFS= read -r v; do
         [ -n "$v" ] && versions+=("$v")
@@ -1449,9 +1460,7 @@ _install_logged() {
     fi
 
     if [ -t 1 ] && [ "${VERBOSE_BUILD:-false}" != "true" ]; then
-        local _cur=0 _start _now _elapsed _elapsed_str _pct _filled _bar _i
-        local _tmp_out _make_exit
-        _tmp_out=$(mktemp)
+        local _cur=0 _start _make_exit
         _start=$(date +%s)
 
         # Print 2 reserved lines for the install HUD
@@ -1469,8 +1478,7 @@ _install_logged() {
             if   [ "$e" -ge 3600 ]; then estr="$(( e/3600 ))h$(( (e%3600)/60 ))m$(( e%60 ))s"
             elif [ "$e" -ge 60   ]; then estr="$(( e/60 ))m$(( e%60 ))s"
             else                         estr="${e}s"; fi
-            printf "\033[2A"
-            printf "\033[K${C_MAG}  [%s] %3d%%${C_R}  ${C_DIM}(%d / %d)${C_R}\n" \
+            printf "\033[2A\033[K${C_MAG}  [%s] %3d%%${C_R}  ${C_DIM}(%d / %d)${C_R}\n" \
                 "$bar" "$pct" "$cur" "$tot"
             printf "\033[K  ${C_CYN}elapsed${C_R} %-10s  ${C_CYN}installing${C_R} %s\n" \
                 "$estr" "$phase"
@@ -1479,31 +1487,17 @@ _install_logged() {
         _draw_install 0 "$_total" "starting..." "$_start"
 
         set +e
-        make "$@" install > "$_tmp_out" 2>&1 &
-        local _make_pid=$!
-
-        while kill -0 "$_make_pid" 2>/dev/null || [ -s "$_tmp_out" ]; do
-            while IFS= read -r _line; do
-                printf '%s\n' "$_line" >> "${BUILD_LOG:-/dev/null}"
-                if printf '%s' "$_line" | grep -q 'tools/install'; then
-                    _cur=$(( _cur + 1 ))
-                    # Extract last path component being installed
-                    local _dest
-                    _dest=$(printf '%s' "$_line" | grep -oE '[^ ]+$' | tail -1)
-                    _dest="${_dest##*/}"
-                    _draw_install "$_cur" "$_total" "$_dest" "$_start"
-                fi
-            done < "$_tmp_out"
-            kill -0 "$_make_pid" 2>/dev/null && > "$_tmp_out" || break
-            sleep 0.1
-        done
-
-        wait "$_make_pid"; _make_exit=$?
-        # drain remaining
-        while IFS= read -r _line; do
+        make "$@" install 2>&1 | while IFS= read -r _line; do
             printf '%s\n' "$_line" >> "${BUILD_LOG:-/dev/null}"
-        done < "$_tmp_out"
-        rm -f "$_tmp_out"
+            if printf '%s' "$_line" | grep -q 'tools/install'; then
+                _cur=$(( _cur + 1 ))
+                local _dest
+                _dest=$(printf '%s' "$_line" | grep -oE '[^ ]+$' | tail -1)
+                _dest="${_dest##*/}"
+                _draw_install "$_cur" "$_total" "$_dest" "$_start"
+            fi
+        done
+        _make_exit=${PIPESTATUS[0]}
         set -e
 
         _draw_install "$_total" "$_total" "complete ✓" "$_start"

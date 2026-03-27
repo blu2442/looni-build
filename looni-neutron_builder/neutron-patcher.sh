@@ -177,7 +177,7 @@ if [ ${#REQUESTED_GROUPS[@]} -gt 0 ]; then
 elif [ -t 0 ]; then
     # Interactive selection via fzf or numbered menu
     if command -v fzf >/dev/null 2>&1; then
-        _fzf_input=""
+        _fzf_input=$'[ALL]\tApply all available patch groups\n'
         for g in "${AVAILABLE_GROUPS[@]}"; do
             _fzf_input+="${g}"$'\t'"${GROUP_DESC[$g]}  (priority: ${GROUP_PRIO[$g]})"$'\n'
         done
@@ -195,9 +195,14 @@ elif [ -t 0 ]; then
             | cut -f1)" || true
 
         if [ -n "$_picked" ]; then
-            while IFS= read -r g; do
-                [ -n "$g" ] && SELECTED_GROUPS+=("$g")
-            done <<< "$_picked"
+            # Check if [ALL] was selected
+            if printf '%s\n' "$_picked" | grep -qF '[ALL]'; then
+                SELECTED_GROUPS=("${AVAILABLE_GROUPS[@]}")
+            else
+                while IFS= read -r g; do
+                    [ -n "$g" ] && SELECTED_GROUPS+=("$g")
+                done <<< "$_picked"
+            fi
         fi
     else
         # Numbered fallback
