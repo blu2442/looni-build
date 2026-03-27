@@ -179,9 +179,10 @@ compiler flags you want.
 neutron-builder                                  # interactive wizard
 neutron-builder --source proton-wine             # Valve proton-wine (branch picker)
 neutron-builder --source proton-wine --branch proton_9.0
+neutron-builder --source ge-proton               # GE-Proton — proton-wine + GE gaming patches
 neutron-builder --source kron4ek-tkg             # Kron4ek wine-tkg + ntsync
 neutron-builder --patches all                    # apply all patch groups
-neutron-builder --patches performance,game-fixes # apply specific groups
+neutron-builder --patches custom                 # apply specific groups
 neutron-builder --sniper                         # enable Steam Runtime Sniper container
 neutron-builder --dxvk dxvk-release              # download pre-built DXVK (skip compile)
 neutron-builder --vkd3d vkd3d-proton-release     # download pre-built VKD3D-Proton
@@ -197,7 +198,24 @@ neutron-builder --list                           # show installed Neutron builds
 |-----|--------|-------|
 | `proton-wine` | Valve proton-wine | Stable branches with interactive version picker |
 | `proton-wine-experimental` | Valve proton-wine experimental | Bleeding-edge, no picker |
+| `ge-proton` | GE-Proton (GloriousEggroll) | proton-wine + GE's full gaming patch set (version picker) |
 | `kron4ek-tkg` | Kron4ek wine-tkg | Mainline + Staging + TKG patches + ntsync |
+
+#### GE Neutron (GloriousEggroll)
+
+Select `ge-proton` as your source to build a **GE Neutron** — proton-wine with
+GloriousEggroll's full gaming patch set applied automatically. The version picker
+shows GE release tags (GE-Proton9-20, etc.) and resolves the matching proton-wine
+branch. The builder clones `proton-ge-custom`, runs GE's `protonprep.sh` to
+apply all patches (Media Foundation, FSR, game-specific fixes, etc.), then compiles
+through the normal Neutron pipeline.
+
+```bash
+neutron-builder --source ge-proton                    # interactive GE release picker
+neutron-builder --source ge-proton --branch GE-Proton9-20  # pin to specific release
+```
+
+The resulting build appears in Steam as `looni-ge-neutron-<version>`.
 
 #### DXVK & VKD3D-Proton Options
 
@@ -343,40 +361,36 @@ neutron-builder includes a full patch system (`neutron-patcher.sh`) that applies
 curated patch groups to the Wine source between fetch and configure. Patches are
 sourced from GE-Proton and the community, targeting Wine 11.x / proton-wine.
 
-**Shipped patch groups (21 patches across 6 groups):**
-
-| Group | Priority | Patches | Description |
-|-------|----------|---------|-------------|
-| `ntsync` | 5 | 1 | NT sync thread suspension fix |
-| `performance` | 10 | 6 | NVIDIA low-latency, exe relocation, de-steamify, fast audio, write-watch downgrade |
-| `fullscreen-hack` | 20 | 1 | AMD FSR upscaler + borderless fullscreen hack |
-| `mouse-fixes` | 25 | 1 | Env var to disable WM decorations |
-| `game-fixes` | 30 | 8 | Anti-cheat compat (hide Wine exports), EAC timeout, D2D crash, input fixes |
-| `media-foundation` | 40 | 4 | GStreamer video playback, cutscenes, media converter |
+`patches/` ships with an empty `custom/` template — no pre-built patches are
+included. Drop your own `.patch` files into `custom/` (or any new subdirectory)
+and the patcher auto-discovers them.
 
 **Usage:**
 
 ```bash
-neutron-builder --patches all                    # apply everything
-neutron-builder --patches performance,game-fixes # specific groups
+neutron-builder --patches all                    # apply everything discovered
+neutron-builder --patches custom                 # apply only the custom group
 neutron-builder --patches none                   # skip patching
 neutron-builder                                  # interactive fzf multi-picker
 ```
 
-**Adding custom patches:** Drop `.patch` files into a new subdirectory under
-`patches/` — the patcher auto-discovers any directory with `.patch` files. Add an
-optional `group.conf` for metadata:
+**Adding patches:** Place `.patch` files in `patches/custom/` or create
+additional subdirectories under `patches/`. Each directory with `.patch` files
+is treated as a patch group. Add an optional `group.conf` for metadata:
 
 ```ini
 description="My custom patches for game X"
 priority=50
-sources=proton-wine,kron4ek-tkg
-conflicts=other-group
-requires=performance
+sources=
+conflicts=
+requires=
 ```
 
 A `series` file (one filename per line) controls application order. Without it,
 patches are applied in sorted filename order (`0001-*.patch` convention).
+
+See `patches/custom/README.md` for full documentation on group.conf fields,
+naming conventions, and examples.
 
 The patcher creates a git checkpoint before applying, so you can revert with
 `git checkout neutron-pre-patch-<timestamp>` in the Wine source directory.
@@ -815,13 +829,8 @@ looni-build/
 │   ├── spinner.sh                              Progress animation
 │   ├── ntsync.h                                Kernel header for ntsync support
 │   ├── neutron-customization.cfg               Build config
-│   ├── patches/                                Curated patch groups (21 patches, 6 groups)
-│   │   ├── ntsync/                             NT sync fixes
-│   │   ├── performance/                        NVIDIA low-latency, exe reloc, audio, de-steamify
-│   │   ├── fullscreen-hack/                    AMD FSR upscaler + borderless fullscreen
-│   │   ├── mouse-fixes/                        WM decoration control
-│   │   ├── game-fixes/                         Anti-cheat, EAC, D2D, input fixes
-│   │   └── media-foundation/                   GStreamer video/cutscene support
+│   ├── patches/                                User patch groups (add your own)
+│   │   └── custom/                             Empty template — drop .patch files here
 │   └── deps-neutron-tkg                        TKG dependency list
 │
 ├── looni-proton_builder/

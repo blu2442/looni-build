@@ -126,6 +126,7 @@ declare -A WINE_SOURCE_URL=(
     [staging]="https://gitlab.winehq.org/wine/wine.git"
     [proton-wine]="https://github.com/ValveSoftware/wine.git"
     [proton-wine-experimental]="https://github.com/ValveSoftware/wine.git"
+    [ge-proton]="https://github.com/ValveSoftware/wine.git"
     [kron4ek-tkg]="https://github.com/Kron4ek/wine-tkg.git"
 )
 declare -A WINE_SOURCE_BRANCH=(
@@ -134,6 +135,7 @@ declare -A WINE_SOURCE_BRANCH=(
     [staging]=""               # version picker queries wine-staging tags; clone at matching mainline tag
     [proton-wine]=""              # version picker selects the branch (proton_X.Y)
     [proton-wine-experimental]="bleeding-edge"
+    [ge-proton]=""                # set by GE release picker → matching proton_X.Y branch
     [kron4ek-tkg]=""              # default branch tracks latest Wine + staging + TKG + ntsync
 )
 declare -A WINE_SOURCE_DESC=(
@@ -142,25 +144,30 @@ declare -A WINE_SOURCE_DESC=(
     [staging]="WineHQ + Staging      — mainline + community patches (version picker)"
     [proton-wine]="Valve proton-wine     — stable branches (version picker)"
     [proton-wine-experimental]="Valve proton-wine exp  — bleeding-edge (no version picker)"
+    [ge-proton]="GE-Proton (GloriousEggroll) — proton-wine + GE gaming patches (version picker)"
     [kron4ek-tkg]="Kron4ek wine-tkg      — Wine source tree with Staging + TKG + ntsync patches"
 )
 declare -A WINE_SOURCE_HAS_VERSIONS=(
     [mainline]="true"
     [staging]="true"          # queries wine-staging repo for tags, then clones matching mainline
     [proton-wine]="true"
+    [ge-proton]="true"        # queries GE release tags (GE-Proton9-20, etc.)
     [kron4ek-tkg]="true"
 )
 declare -A WINE_SOURCE_VERSION_REF_TYPE=(
     [mainline]="tags"         # wine-X.Y tags
     [staging]="tags"          # staging version picker queries wine-staging repo separately
     [proton-wine]="heads"     # branches, not tags
+    [ge-proton]="tags"        # GE release tags
     [kron4ek-tkg]="tags"      # standard wine-X.Y tags
 )
 # Sources that need wine-staging patches applied after clone
 declare -A WINE_SOURCE_NEEDS_STAGING=(
     [staging]="true"
 )
-WINE_SOURCE_KEYS=( mainline experimental staging proton-wine proton-wine-experimental kron4ek-tkg )
+# GE-Proton repo URL (separate from Wine source — used to fetch patches)
+GE_PROTON_REPO="https://github.com/GloriousEggroll/proton-ge-custom.git"
+WINE_SOURCE_KEYS=( mainline experimental staging proton-wine proton-wine-experimental ge-proton kron4ek-tkg )
 
 # ── DXVK source ──────────────────────────────────────────────────────────────
 declare -A DXVK_SOURCE_URL=(
@@ -237,7 +244,7 @@ print_usage() {
 ${C_B}Usage:${C_R} $0 [options]
 
 ${C_B}Wine source (required):${C_R}
-  --source NAME         mainline | experimental | staging |
+  --source NAME         mainline | experimental | staging | ge-proton |
                         proton-wine | proton-wine-experimental | kron4ek-tkg
   --branch BRANCH       Pin to a specific branch or tag (e.g. proton_9.0, wine-10.6)
                         Skips the interactive version picker when provided.
@@ -816,6 +823,7 @@ pick_wine_version() {
         case "$key" in
             kron4ek-tkg) _tag_pattern='^[0-9]+\.[0-9]' ;;
             staging)     _tag_pattern='^v[0-9]+\.[0-9]' ;;
+            ge-proton)   _tag_pattern='^GE-Proton[0-9]+-[0-9]+' ;;
             *)           _tag_pattern='^wine-[0-9]+\.[0-9]' ;;
         esac
         raw_refs=$(
@@ -880,6 +888,10 @@ pick_wine_version() {
                           ver="${v#v}"
                           label="Wine Staging ${ver}  (tag: ${v})"
                           ;;
+                      ge-proton)
+                          ver="$v"
+                          label="GE-Proton ${ver}  (GloriousEggroll)"
+                          ;;
                       *)
                           ver="${v#proton_}"
                           label="Valve Proton ${ver}  (branch: ${v})"
@@ -924,6 +936,10 @@ pick_wine_version() {
             staging)
                 ver="${v#v}"
                 label="Wine Staging ${ver}  (tag: ${v})"
+                ;;
+            ge-proton)
+                ver="$v"
+                label="GE-Proton ${ver}  (GloriousEggroll)"
                 ;;
             *)
                 ver="${v#proton_}"
@@ -1576,7 +1592,11 @@ print_summary() {
 
     # Component status — check actual DLL presence, not just source key
     printf "\n  ${C_B}Component status:${C_R}\n"
-    printf "    ${C_GRN}✓${C_R}  proton-wine   — built and installed\n"
+    if [ "$WINE_SOURCE_KEY" = "ge-proton" ]; then
+        printf "    ${C_GRN}✓${C_R}  GE-Proton     — proton-wine + GloriousEggroll patches\n"
+    else
+        printf "    ${C_GRN}✓${C_R}  proton-wine   — built and installed\n"
+    fi
     if [ "${DXVK_SOURCE_KEY}" = "none" ]; then
         printf "    ${C_DIM}-${C_R}  DXVK          — skipped (--dxvk none)\n"
     elif [ -n "$(find "${install_prefix}/files/lib64/wine/dxvk" -name '*.dll' 2>/dev/null | head -1)" ]; then
@@ -1903,7 +1923,12 @@ check_disk_space "$DEST_ROOT"
 # ── Resolve build directories ─────────────────────────────────────────────────
 # BUILD_NAME is either from --name, pick_build_name, or the source key default.
 # The Wine version number is appended to the final package dir after the build.
-[ -n "$BUILD_NAME" ] || BUILD_NAME="looni-neutron"
+if [ -z "$BUILD_NAME" ]; then
+    case "$WINE_SOURCE_KEY" in
+        ge-proton) BUILD_NAME="looni-ge-neutron" ;;
+        *)         BUILD_NAME="looni-neutron" ;;
+    esac
+fi
 WINE_SOURCE_DIR="${SRC_ROOT}/${WINE_SOURCE_KEY}"
 BUILD_RUN_DIR="${DEST_ROOT}/build-run/${BUILD_NAME}"
 # Proton's Wine installs to <package>/files/ — not the package root
@@ -1934,6 +1959,24 @@ if [ "$WINE_SOURCE_KEY" = "staging" ]; then
         _wine_branch="wine-${_wine_branch#v}"
         msg2 "Staging tag ${STAGING_BRANCH} → cloning mainline at ${_wine_branch}"
     fi
+elif [ "$WINE_SOURCE_KEY" = "ge-proton" ]; then
+    # GE-Proton: pick a GE release tag, then resolve the proton-wine branch it targets
+    pick_wine_version "$GE_PROTON_REPO" "$WINE_SOURCE_KEY"
+    # _wine_branch is now e.g. "GE-Proton9-20" — save it and resolve proton-wine branch
+    if [ -n "$_wine_branch" ]; then
+        GE_RELEASE_TAG="$_wine_branch"
+        # GE-ProtonX-Y targets proton_X.0 branch (e.g. GE-Proton9-20 → proton_9.0)
+        _ge_major="${GE_RELEASE_TAG#GE-Proton}"
+        _ge_major="${_ge_major%%-*}"
+        _wine_branch="proton_${_ge_major}.0"
+        msg2 "GE release ${GE_RELEASE_TAG} → proton-wine branch ${_wine_branch}"
+    else
+        # No version picked — use latest GE release, default to proton_9.0
+        GE_RELEASE_TAG=""
+        _wine_branch="proton_9.0"
+        msg2 "Using default proton-wine branch: ${_wine_branch}"
+    fi
+    export GE_RELEASE_TAG
 else
     pick_wine_version "${WINE_SOURCE_URL[$WINE_SOURCE_KEY]}" "$WINE_SOURCE_KEY"
 fi
@@ -1945,7 +1988,7 @@ section "Fetching Wine source"
 # Clone strategy: Valve's fork needs full history for git describe;
 # WineHQ sources can use shallow clones for speed.
 case "$WINE_SOURCE_KEY" in
-    proton-wine|proton-wine-experimental)
+    proton-wine|proton-wine-experimental|ge-proton)
         msg2 "Full clone — required for Valve version strings (git describe)"
         _shallow="false"
         ;;
@@ -1966,6 +2009,121 @@ fetch_source \
 [ -f "${WINE_SOURCE_DIR}/configure.ac" ] || \
     err "configure.ac not found in: $WINE_SOURCE_DIR
      This does not look like a Wine source tree."
+
+# ── GE-Proton patch application ──────────────────────────────────────────────
+# When source is ge-proton, clone the GE repo and run protonprep.sh to apply
+# all of GloriousEggroll's gaming patches on top of proton-wine.
+if [ "$WINE_SOURCE_KEY" = "ge-proton" ]; then
+    section "GE-Proton patches (GloriousEggroll)"
+
+    GE_CACHE_DIR="${SRC_ROOT}/proton-ge-custom"
+    _ge_branch_flag=()
+    [ -n "${GE_RELEASE_TAG:-}" ] && _ge_branch_flag=( "--branch" "$GE_RELEASE_TAG" )
+
+    if [ ! -d "${GE_CACHE_DIR}/.git" ]; then
+        msg "Cloning proton-ge-custom…"
+        [ -n "${GE_RELEASE_TAG:-}" ] && msg2 "Release: ${GE_RELEASE_TAG}"
+        run git clone --depth=1 \
+            "${_ge_branch_flag[@]+"${_ge_branch_flag[@]}"}" \
+            "$GE_PROTON_REPO" "$GE_CACHE_DIR"
+    else
+        msg "Updating proton-ge-custom…"
+        if [ -n "${GE_RELEASE_TAG:-}" ]; then
+            run git -C "$GE_CACHE_DIR" fetch --depth=1 origin "refs/tags/${GE_RELEASE_TAG}:refs/tags/${GE_RELEASE_TAG}" 2>/dev/null || \
+                run git -C "$GE_CACHE_DIR" fetch origin
+            run git -C "$GE_CACHE_DIR" checkout "$GE_RELEASE_TAG"
+        else
+            run git -C "$GE_CACHE_DIR" pull --ff-only 2>/dev/null || true
+        fi
+    fi
+
+    ok "GE source ready: ${GE_CACHE_DIR}"
+
+    # ── Apply GE patches via protonprep.sh ──────────────────────────────
+    # protonprep.sh expects to be run from the GE repo root with the wine
+    # source tree as a subdirectory or sibling.  We adapt to work with our
+    # layout: symlink our wine source as "wine" in the GE tree, then run
+    # protonprep.sh from within it.
+    _ge_patches_dir="${GE_CACHE_DIR}/patches"
+
+    if [ -f "${_ge_patches_dir}/protonprep.sh" ]; then
+        msg "Applying GE patches via protonprep.sh…"
+        msg2 "This applies GE's full gaming patch set on top of proton-wine"
+
+        # protonprep.sh does 'cd wine' — create a symlink so it finds our tree
+        _ge_wine_link="${GE_CACHE_DIR}/wine"
+        if [ -L "$_ge_wine_link" ]; then
+            rm -f "$_ge_wine_link"
+        elif [ -d "$_ge_wine_link" ]; then
+            # Real submodule checkout — move it aside
+            mv "$_ge_wine_link" "${_ge_wine_link}.orig-submodule"
+        fi
+        ln -sf "$WINE_SOURCE_DIR" "$_ge_wine_link"
+
+        # Also create wine-staging symlink if GE's script expects it
+        _ge_staging_link="${GE_CACHE_DIR}/wine-staging"
+        if [ ! -e "$_ge_staging_link" ]; then
+            # Clone wine-staging for GE's protonprep (it applies staging patches)
+            _ge_staging_dir="${SRC_ROOT}/wine-staging-ge"
+            if [ ! -d "${_ge_staging_dir}/.git" ]; then
+                msg2 "Cloning wine-staging for GE patch application…"
+                run git clone --depth=1 \
+                    "https://github.com/wine-staging/wine-staging.git" \
+                    "$_ge_staging_dir"
+            fi
+            ln -sf "$_ge_staging_dir" "$_ge_staging_link"
+        fi
+
+        # Run protonprep.sh from the GE repo root
+        _ge_patch_log="${BUILD_RUN_DIR}/ge-protonprep.log"
+        msg2 "Log: ${_ge_patch_log}"
+
+        if [ "${DRY_RUN:-0}" -eq 1 ]; then
+            dim "  [dry-run] Would run protonprep.sh"
+        else
+            set +e
+            ( cd "$GE_CACHE_DIR" && bash patches/protonprep.sh ) \
+                > "$_ge_patch_log" 2>&1
+            _ge_exit=$?
+            set -e
+
+            if [ "$_ge_exit" -eq 0 ]; then
+                ok "GE-Proton patches applied successfully"
+            else
+                warn "protonprep.sh exited with code ${_ge_exit}"
+                warn "Some GE patches may have failed — check: ${_ge_patch_log}"
+                msg2 "Continuing build (partial patches are usually fine)…"
+            fi
+        fi
+
+        # Clean up symlink
+        rm -f "$_ge_wine_link"
+    elif [ -d "$_ge_patches_dir" ]; then
+        # No protonprep.sh — try applying .patch files directly
+        msg "No protonprep.sh found — applying GE .patch files directly"
+        _ge_patch_count=0
+        _ge_patch_fail=0
+        for _pf in "${_ge_patches_dir}"/**/*.patch "${_ge_patches_dir}"/*.patch; do
+            [ -f "$_pf" ] || continue
+            _pname="$(basename "$_pf")"
+            if (cd "$WINE_SOURCE_DIR" && git apply --check "$_pf" 2>/dev/null); then
+                (cd "$WINE_SOURCE_DIR" && git apply "$_pf" 2>/dev/null) && \
+                    { printf "  ${C_GRN}✓${C_R}  %s\n" "$_pname"; (( _ge_patch_count++ )) || true; } || \
+                    { printf "  ${C_RED}✗${C_R}  %s\n" "$_pname"; (( _ge_patch_fail++ )) || true; }
+            elif (cd "$WINE_SOURCE_DIR" && patch -p1 --dry-run < "$_pf" >/dev/null 2>&1); then
+                (cd "$WINE_SOURCE_DIR" && patch -p1 < "$_pf" >/dev/null 2>&1) && \
+                    { printf "  ${C_GRN}✓${C_R}  %s\n" "$_pname"; (( _ge_patch_count++ )) || true; } || \
+                    { printf "  ${C_RED}✗${C_R}  %s\n" "$_pname"; (( _ge_patch_fail++ )) || true; }
+            else
+                printf "  ${C_YLW}⊘${C_R}  %s (skipped)\n" "$_pname"
+            fi
+        done
+        ok "GE patches: ${_ge_patch_count} applied, ${_ge_patch_fail} failed"
+    else
+        warn "No patches directory found in proton-ge-custom"
+        warn "GE patches could not be applied — building plain proton-wine"
+    fi
+fi
 
 # ── Apply neutron patch groups ────────────────────────────────────────────────
 if [ -x "$PATCHER" ] && [ -d "$PATCHES_DIR" ]; then
