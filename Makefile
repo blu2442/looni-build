@@ -183,9 +183,12 @@ install-neutron: _dirs
 # ── looni-proton_builder ──────────────────────────────────────────────────────
 install-proton: _dirs
 	@printf "\033[1;36m── looni-proton_builder\033[0m\n"
-	install -m 755 "$(PROTON_B)/$(PROTON_B_BIN)" \
-	    "$(DESTDIR)$(BINDIR)/proton-builder"
-	@printf "  \033[1;32m+\033[0m $(DESTDIR)$(BINDIR)/proton-builder\n"
+	@if [ -f "$(PROTON_B)/$(PROTON_B_BIN)" ]; then \
+	    install -m 755 "$(PROTON_B)/$(PROTON_B_BIN)" "$(DESTDIR)$(BINDIR)/proton-builder"; \
+	    printf "  \033[1;32m+\033[0m $(DESTDIR)$(BINDIR)/proton-builder\n"; \
+	else \
+	    printf "  \033[2mskip (not found): $(PROTON_B)/$(PROTON_B_BIN)\033[0m\n"; \
+	fi
 
 # ── looni-wine_builder ────────────────────────────────────────────────────────
 install-wine: _dirs
@@ -238,16 +241,22 @@ install-launcher: _dirs
 # ── looni-wine-proton_hybrid_builder ─────────────────────────────────────────
 install-hybrid: _dirs
 	@printf "\033[1;36m── looni-wine-proton_hybrid_builder\033[0m\n"
-	install -m 755 "$(HYBRID)/$(HYBRID_BIN)" \
-	    "$(DESTDIR)$(BINDIR)/wine-proton_hybrid"
-	@printf "  \033[1;32m+\033[0m $(DESTDIR)$(BINDIR)/wine-proton_hybrid\n"
+	@if [ -f "$(HYBRID)/$(HYBRID_BIN)" ]; then \
+	    install -m 755 "$(HYBRID)/$(HYBRID_BIN)" "$(DESTDIR)$(BINDIR)/wine-proton_hybrid"; \
+	    printf "  \033[1;32m+\033[0m $(DESTDIR)$(BINDIR)/wine-proton_hybrid\n"; \
+	else \
+	    printf "  \033[2mskip (not found): $(HYBRID)/$(HYBRID_BIN)\033[0m\n"; \
+	fi
 
 # ── looni-wine-neutron_hybrid_builder ────────────────────────────────────────
 install-neutron-hybrid: _dirs
 	@printf "\033[1;36m── looni-wine-neutron_hybrid_builder\033[0m\n"
-	install -m 755 "$(NHYBRID)/$(NHYBRID_BIN)" \
-	    "$(DESTDIR)$(BINDIR)/wine-neutron_hybrid"
-	@printf "  \033[1;32m+\033[0m $(DESTDIR)$(BINDIR)/wine-neutron_hybrid\n"
+	@if [ -f "$(NHYBRID)/$(NHYBRID_BIN)" ]; then \
+	    install -m 755 "$(NHYBRID)/$(NHYBRID_BIN)" "$(DESTDIR)$(BINDIR)/wine-neutron_hybrid"; \
+	    printf "  \033[1;32m+\033[0m $(DESTDIR)$(BINDIR)/wine-neutron_hybrid\n"; \
+	else \
+	    printf "  \033[2mskip (not found): $(NHYBRID)/$(NHYBRID_BIN)\033[0m\n"; \
+	fi
 
 # ── looni-winetoolz ───────────────────────────────────────────────────────────
 install-toolz: _dirs

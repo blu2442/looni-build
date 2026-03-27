@@ -1743,14 +1743,14 @@ fi
 # If not set via --sniper, ask interactively
 if [ "$SNIPER_MODE" = "false" ] && [ -t 0 ]; then
     _sniper_items=(
-        "no\tStandard mode — runs on host (broader compatibility)"
-        "yes\tSniper mode — runs inside Steam Runtime 3.0 container (SteamOS-like isolation)"
+        $'no\tStandard mode — runs on host (broader compatibility)'
+        $'yes\tSniper mode — runs inside Steam Runtime 3.0 container (SteamOS-like isolation)'
     )
     if command -v fzf >/dev/null 2>&1; then
         _sniper_choice="$(printf '%s\n' "${_sniper_items[@]}" \
             | fzf --prompt="Steam Runtime Sniper mode? " \
                   --header="Enable Steam Runtime container isolation?" \
-                  --height=10% --reverse --delimiter=$'\t' --with-nth=2 \
+                  --height=12% --reverse --delimiter=$'\t' --with-nth=2 \
             | cut -f1)" || true
     else
         printf "\n  ${C_B}Steam Runtime Sniper mode?${C_R}\n"
