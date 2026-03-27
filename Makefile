@@ -5,7 +5,8 @@
 #
 # Usage:
 #   make install          — install everything to $(PREFIX)
-#   make install-neutron   — install only looni-neutron_builder
+#   make install-neutron  — install only looni-neutron_builder
+#   make install-proton   — install only looni-proton_builder
 #   make install-wine     — install only looni-wine_builder
 #   make install-hybrid   — install only looni-wine-proton_hybrid_builder
 #   make install-toolz    — install only looni-winetoolz
@@ -28,10 +29,13 @@ BINDIR  := $(PREFIX)/bin
 # Each sub-project gets its own lib directory so internal SCRIPT_DIR-relative
 # paths continue to work correctly after install.
 NEUTRON_LIBDIR  := $(PREFIX)/lib/looni-neutron_builder
+PROTON_B_LIBDIR := $(PREFIX)/lib/looni-proton_builder
 WINE_LIBDIR     := $(PREFIX)/lib/looni-wine_builder
 HYBRID_LIBDIR   := $(PREFIX)/lib/looni-wine-proton_hybrid_builder
+NHYBRID_LIBDIR  := $(PREFIX)/lib/looni-wine-neutron_hybrid_builder
 TOOLZ_LIBDIR    := $(PREFIX)/lib/looni-winetoolz
-PROTON_I_LIBDIR := $(PREFIX)/lib/looni-proton-install
+NEUTRON_I_LIBDIR := $(PREFIX)/lib/looni-neutron-install
+PROTON_I_LIBDIR  := $(PREFIX)/lib/looni-proton-install
 
 CFGDIR  := $(HOME)/.config/looni-build
 DESTDIR ?=
@@ -47,9 +51,12 @@ MARKER_WINE_E   := \# ── end looni-build wine-default ──
 ROOT   := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
 LAUNCHER := $(ROOT)looni-build.sh
 NEUTRON   := $(ROOT)looni-neutron_builder
+PROTON_B  := $(ROOT)looni-proton_builder
 WINE      := $(ROOT)looni-wine_builder
 HYBRID    := $(ROOT)looni-wine-proton_hybrid_builder
+NHYBRID   := $(ROOT)looni-wine-neutron_hybrid_builder
 TOOLZ     := $(ROOT)looni-winetoolz
+NEUTRON_I := $(ROOT)looni-neutron-install
 PROTON_I  := $(ROOT)looni-proton-install
 
 # ── File lists ────────────────────────────────────────────────────────────────
@@ -67,6 +74,9 @@ NEUTRON_LIBS := \
     Containerfile.neutron
 NEUTRON_CFG  := neutron-customization.cfg
 
+# proton_builder: single delegated-build script (wraps GE-Proton / TKG)
+PROTON_B_BIN  := proton-builder.sh
+
 # wine_builder: launcher + engine scripts
 WINE_BIN  := wine-builder.sh
 WINE_LIBS := \
@@ -79,8 +89,12 @@ WINE_LIBS := \
     deps-tkg
 WINE_CFG  := customization.cfg
 
-# hybrid installer: launcher only
-HYBRID_BIN := wine-proton_hybrid-v1.0.0.sh
+# hybrid installers: launcher only
+HYBRID_BIN  := wine-proton_hybrid-v1.0.0.sh
+NHYBRID_BIN := wine-neutron_hybrid-v1.0.0.sh
+
+# neutron-install: single script
+NEUTRON_I_BIN := neutron-install.sh
 
 # proton-install: single script
 PROTON_I_BIN := proton-install.sh
@@ -110,25 +124,29 @@ TOOLZ_MODULES := \
     modules/shared_lib/winetoolz-prefix-maker.sh
 
 # ── Phony targets ─────────────────────────────────────────────────────────────
-.PHONY: all install install-neutron install-wine install-hybrid install-toolz \
-        install-launcher install-proton-install uninstall help _dirs _setup-path
+.PHONY: all install install-neutron install-proton install-wine install-hybrid install-neutron-hybrid install-toolz \
+        install-launcher install-neutron-install install-proton-install uninstall help _dirs _setup-path
 
 all: help
 
 # ── install ───────────────────────────────────────────────────────────────────
-install: _dirs install-launcher install-neutron install-wine install-hybrid install-toolz install-proton-install _setup-path
+install: _dirs install-launcher install-neutron install-proton install-wine install-hybrid install-neutron-hybrid install-toolz install-neutron-install install-proton-install _setup-path
 	@printf "\n\033[1;32m ✓  looni-build installed to %s\033[0m\n\n" "$(DESTDIR)$(PREFIX)"
 	@printf "  looni-build        → $(DESTDIR)$(BINDIR)/looni-build\n"
 	@printf "  neutron-builder    → $(DESTDIR)$(BINDIR)/neutron-builder\n"
+	@printf "  neutron-install    → $(DESTDIR)$(BINDIR)/neutron-install\n"
+	@printf "  proton-builder     → $(DESTDIR)$(BINDIR)/proton-builder\n"
 	@printf "  proton-install     → $(DESTDIR)$(BINDIR)/proton-install\n"
 	@printf "  wine-builder       → $(DESTDIR)$(BINDIR)/wine-builder\n"
 	@printf "  wine_toolz         → $(DESTDIR)$(BINDIR)/wine_toolz\n"
-	@printf "  wine-proton_hybrid → $(DESTDIR)$(BINDIR)/wine-proton_hybrid\n"
+	@printf "  wine-proton_hybrid  → $(DESTDIR)$(BINDIR)/wine-proton_hybrid\n"
+	@printf "  wine-neutron_hybrid → $(DESTDIR)$(BINDIR)/wine-neutron_hybrid\n"
 	@printf "  config             → $(DESTDIR)$(CFGDIR)/\n\n"
 	@printf "  Make sure \033[1m$(PREFIX)/bin\033[0m is in your PATH.\n\n"
 
 _dirs:
 	install -d "$(DESTDIR)$(BINDIR)"
+	install -d "$(DESTDIR)$(NEUTRON_I_LIBDIR)"
 	install -d "$(DESTDIR)$(PROTON_I_LIBDIR)"
 	install -d "$(DESTDIR)$(NEUTRON_LIBDIR)"
 	install -d "$(DESTDIR)$(NEUTRON_LIBDIR)/patches"
@@ -136,6 +154,8 @@ _dirs:
 	install -d "$(DESTDIR)$(WINE_LIBDIR)/patches"
 	install -d "$(DESTDIR)$(HYBRID_LIBDIR)"
 	install -d "$(DESTDIR)$(HYBRID_LIBDIR)/buildz"
+	install -d "$(DESTDIR)$(NHYBRID_LIBDIR)"
+	install -d "$(DESTDIR)$(NHYBRID_LIBDIR)/buildz"
 	install -d "$(DESTDIR)$(TOOLZ_LIBDIR)/modules/shared_lib"
 	install -d "$(DESTDIR)$(CFGDIR)"
 
@@ -160,6 +180,13 @@ install-neutron: _dirs
 	    printf "  \033[1;32m+\033[0m $$dest\n"; \
 	fi
 
+# ── looni-proton_builder ──────────────────────────────────────────────────────
+install-proton: _dirs
+	@printf "\033[1;36m── looni-proton_builder\033[0m\n"
+	install -m 755 "$(PROTON_B)/$(PROTON_B_BIN)" \
+	    "$(DESTDIR)$(BINDIR)/proton-builder"
+	@printf "  \033[1;32m+\033[0m $(DESTDIR)$(BINDIR)/proton-builder\n"
+
 # ── looni-wine_builder ────────────────────────────────────────────────────────
 install-wine: _dirs
 	@printf "\033[1;36m── looni-wine_builder\033[0m\n"
@@ -180,6 +207,16 @@ install-wine: _dirs
 	    install -m 644 "$$src" "$$dest"; \
 	    printf "  \033[1;32m+\033[0m $$dest\n"; \
 	fi
+
+# ── looni-neutron-install ────────────────────────────────────────────────────
+install-neutron-install: _dirs
+	@printf "\033[1;36m── looni-neutron-install\033[0m\n"
+	install -m 755 "$(NEUTRON_I)/$(NEUTRON_I_BIN)" \
+	    "$(DESTDIR)$(BINDIR)/neutron-install"
+	@printf "  \033[1;32m+\033[0m $(DESTDIR)$(BINDIR)/neutron-install\n"
+	install -m 755 "$(NEUTRON_I)/$(NEUTRON_I_BIN)" \
+	    "$(DESTDIR)$(NEUTRON_I_LIBDIR)/$(NEUTRON_I_BIN)"
+	@printf "  \033[1;32m+\033[0m $(DESTDIR)$(NEUTRON_I_LIBDIR)/$(NEUTRON_I_BIN)\n"
 
 # ── looni-proton-install ─────────────────────────────────────────────────────
 install-proton-install: _dirs
@@ -204,6 +241,13 @@ install-hybrid: _dirs
 	install -m 755 "$(HYBRID)/$(HYBRID_BIN)" \
 	    "$(DESTDIR)$(BINDIR)/wine-proton_hybrid"
 	@printf "  \033[1;32m+\033[0m $(DESTDIR)$(BINDIR)/wine-proton_hybrid\n"
+
+# ── looni-wine-neutron_hybrid_builder ────────────────────────────────────────
+install-neutron-hybrid: _dirs
+	@printf "\033[1;36m── looni-wine-neutron_hybrid_builder\033[0m\n"
+	install -m 755 "$(NHYBRID)/$(NHYBRID_BIN)" \
+	    "$(DESTDIR)$(BINDIR)/wine-neutron_hybrid"
+	@printf "  \033[1;32m+\033[0m $(DESTDIR)$(BINDIR)/wine-neutron_hybrid\n"
 
 # ── looni-winetoolz ───────────────────────────────────────────────────────────
 install-toolz: _dirs
@@ -239,13 +283,16 @@ _setup-path:
 # ── uninstall ─────────────────────────────────────────────────────────────────
 uninstall:
 	@printf "\033[1;33mRemoving looni-build from %s ...\033[0m\n" "$(DESTDIR)$(PREFIX)"
-	@for cmd in looni-build neutron-builder proton-install wine-builder wine_toolz wine_install_mgr wine-proton_hybrid; do \
+	@for cmd in looni-build neutron-builder neutron-install proton-builder proton-install wine-builder wine_toolz wine_install_mgr wine-proton_hybrid wine-neutron_hybrid; do \
 	    f="$(DESTDIR)$(BINDIR)/$$cmd"; \
 	    [ -f "$$f" ] && { rm -f "$$f"; printf "  \033[1;31m-\033[0m $$f\n"; } || true; \
 	done
 	@for d in "$(DESTDIR)$(NEUTRON_LIBDIR)" \
+	          "$(DESTDIR)$(NEUTRON_I_LIBDIR)" \
+	          "$(DESTDIR)$(PROTON_B_LIBDIR)" \
 	          "$(DESTDIR)$(WINE_LIBDIR)" \
 	          "$(DESTDIR)$(HYBRID_LIBDIR)" \
+	          "$(DESTDIR)$(NHYBRID_LIBDIR)" \
 	          "$(DESTDIR)$(TOOLZ_LIBDIR)" \
 	          "$(DESTDIR)$(PROTON_I_LIBDIR)"; do \
 	    [ -d "$$d" ] && { rm -rf "$$d"; printf "  \033[1;31m-\033[0m $$d/\n"; } || true; \
@@ -275,14 +322,17 @@ uninstall:
 
 # ── help ──────────────────────────────────────────────────────────────────────
 help:
-	@printf "\n\033[1mlooni-build — Wine / Proton builders + winetoolz\033[0m\n\n"
+	@printf "\n\033[1mlooni-build — Wine / Neutron / Proton builders + winetoolz\033[0m\n\n"
 	@printf "\033[1mTargets:\033[0m\n"
 	@printf "  \033[1;36mmake install\033[0m           Install all sub-projects + add PATH to ~/.bashrc\n"
 	@printf "  \033[1;36mmake install-launcher\033[0m  looni-build launcher only\n"
 	@printf "  \033[1;36mmake install-neutron\033[0m         looni-neutron_builder only\n"
+	@printf "  \033[1;36mmake install-proton\033[0m          looni-proton_builder only\n"
+	@printf "  \033[1;36mmake install-neutron-install\033[0m looni-neutron-install only\n"
 	@printf "  \033[1;36mmake install-proton-install\033[0m  looni-proton-install only\n"
 	@printf "  \033[1;36mmake install-wine\033[0m            looni-wine_builder only\n"
 	@printf "  \033[1;36mmake install-hybrid\033[0m          looni-wine-proton_hybrid_builder only\n"
+	@printf "  \033[1;36mmake install-neutron-hybrid\033[0m  looni-wine-neutron_hybrid_builder only\n"
 	@printf "  \033[1;36mmake install-toolz\033[0m           looni-winetoolz only\n"
 	@printf "  \033[1;36mmake uninstall\033[0m         Remove all installed files (asks about ~/.bashrc)\n"
 	@printf "  \033[1;36mmake help\033[0m              Show this message\n"
@@ -291,7 +341,8 @@ help:
 	@printf "  DESTDIR=<dir>   Staging root  (default: empty)\n"
 	@printf "\n\033[1mInstall layout:\033[0m\n"
 	@printf "  $(PREFIX)/bin/\n"
-	@printf "      neutron-builder  wine-builder  wine_toolz  wine-proton_hybrid\n"
+	@printf "      neutron-builder  neutron-install  proton-builder  proton-install\n"
+	@printf "      wine-builder  wine_toolz  wine-proton_hybrid  wine-neutron_hybrid\n"
 	@printf "  $(PREFIX)/lib/looni-neutron_builder/\n"
 	@printf "      *.sh  ntsync.h  deps-neutron-tkg\n"
 	@printf "  $(PREFIX)/lib/looni-neutron_builder/patches/\n"
@@ -311,10 +362,12 @@ help:
 	@printf "  (data-dir defaults to the lib dir; override with --dest / --src-dir)\n"
 	@printf "\n\033[1mQuick start:\033[0m\n"
 	@printf "  looni-build                     # launch the main menu\n"
-	@printf "  neutron-builder                  # build Proton interactively\n"
+	@printf "  neutron-builder                  # build Neutron interactively\n"
+	@printf "  proton-builder                   # build Proton interactively\n"
 	@printf "  wine-builder                    # build Wine interactively\n"
 	@printf "  wine_toolz                      # open winetoolz\n"
-	@printf "  wine-proton_hybrid              # hybrid installer\n\n"
+	@printf "  wine-proton_hybrid              # Proton hybrid installer\n"
+	@printf "  wine-neutron_hybrid             # Neutron hybrid installer\n\n"
 	@printf "\033[1m~/.bashrc management:\033[0m\n"
 	@printf "  make install   adds a PATH block so looni-build commands are available.\n"
 	@printf "  wine-builder   offers to set a completed build as your default Wine\n"

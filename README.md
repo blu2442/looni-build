@@ -1,11 +1,12 @@
 # looni-build
 
-**Wine & Proton builders, hybrid installer, GUI toolkit, and Proton installer — all in one repo.**
+**Wine & Neutron builders, delegated Proton builder, hybrid installer, GUI toolkit, and installers — all in one repo.**
 
-Build Wine from 10 upstream sources, compile full Proton packages for Steam, merge
-custom Wine over existing Proton installs, manage installations with one-click
-switching, download pre-built Proton releases, and handle prefixes, DXVK, runtimes,
-and DLL overrides through a zenity-based GUI. Or do it all from the CLI.
+Build Wine from 10 upstream sources, compile full Neutron packages for Steam, build
+GE-Proton and proton-tkg using their own upstream build systems, merge custom Wine
+over existing Proton installs, manage installations with one-click switching, deploy
+builds and download pre-built releases, and handle prefixes, DXVK, runtimes, and DLL
+overrides through a zenity-based GUI. Or do it all from the CLI.
 
 ```
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -38,6 +39,8 @@ and DLL overrides through a zenity-based GUI. Or do it all from the CLI.
 - [Tools](#tools)
   - [wine-builder](#-wine-builder--looni-wine_builder)
   - [neutron-builder](#-neutron-builder--looni-neutron_builder)
+  - [proton-builder](#-proton-builder--looni-proton_builder)
+  - [neutron-install](#-neutron-install--looni-neutron-install)
   - [proton-install](#-proton-install--looni-proton-install)
   - [wine-proton_hybrid](#-wine-proton_hybrid--looni-wine-proton_hybrid_builder)
   - [wine_toolz](#-wine_toolz--looni-winetoolz)
@@ -60,8 +63,10 @@ source ~/.bashrc
 
 looni-build             # main menu — pick any tool
 wine-builder            # build Wine interactively
-neutron-builder         # build Proton interactively
-proton-install          # download GE-Proton or other pre-built releases
+neutron-builder         # build Neutron interactively
+proton-builder          # build GE-Proton or proton-tkg (delegated)
+proton-install          # download / deploy Proton packages
+neutron-install         # deploy locally-built Neutron packages
 wine_toolz              # open the GUI toolkit
 wine-proton_hybrid      # hybrid installer
 ```
@@ -79,11 +84,13 @@ make install DESTDIR=/tmp/pkg       # staged for packaging
 Selective install:
 
 ```bash
-make install-neutron     # neutron_builder only
-make install-wine        # wine_builder only
-make install-hybrid      # hybrid_builder only
-make install-toolz       # winetoolz only
-make install-launcher    # looni-build main menu only
+make install-neutron         # neutron_builder only
+make install-proton          # proton_builder only
+make install-wine            # wine_builder only
+make install-hybrid          # hybrid_builder only
+make install-neutron-install # neutron-install only
+make install-toolz           # winetoolz only
+make install-launcher        # looni-build main menu only
 ```
 
 The installer adds a `PATH` block to `~/.bashrc` automatically. If `~/.local/bin`
@@ -161,7 +168,7 @@ tree with `bin/wine`, `lib/`, etc.
 
 ### 🎮 neutron-builder — looni-neutron_builder
 
-Builds a complete **Steam Proton compatibility tool** from source: a Wine build
+Builds a complete **Neutron package** (a Steam-compatible Proton tool) from source: a Wine build
 (proton-wine or kron4ek-tkg) compiled with MinGW PE support, plus DXVK and
 VKD3D-Proton, all assembled into a Steam-loadable package. The result drops into
 `compatibilitytools.d/` and appears in Steam's per-game Compatibility dropdown —
@@ -176,7 +183,7 @@ neutron-builder --source kron4ek-tkg             # Kron4ek wine-tkg + ntsync
 neutron-builder --dxvk-only                      # rebuild DXVK only, skip Wine
 neutron-builder --vkd3d-only                     # rebuild VKD3D-Proton only
 neutron-builder --reinstall-components           # re-package without rebuilding
-neutron-builder --list                           # show installed Proton builds
+neutron-builder --list                           # show installed Neutron builds
 ```
 
 #### Proton Wine Sources
@@ -226,12 +233,12 @@ neutron-builder --list                           # show installed Proton builds
 | `--vkd3d-only` | Rebuild VKD3D-Proton only (skip Wine) |
 | `--reinstall-components` | Re-package without rebuilding |
 | `--cfg PATH` | Alternate `neutron-customization.cfg` |
-| `--list` | Show installed Proton builds |
+| `--list` | Show installed Neutron builds |
 | `--dry-run` | Print planned actions |
 
 #### How neutron Works
 
-neutron-builder assembles a **self-contained Proton compatibility tool** — the same
+neutron-builder assembles a **self-contained Neutron package** — the same
 kind of package that Valve ships as GE-Proton or Proton Experimental. The key
 difference from a regular Wine build is that every component is compiled to run
 inside Steam's Proton infrastructure:
@@ -396,20 +403,104 @@ cp -r ~/.local/share/looni-neutron_builder/buildz/install/<name> \
       ~/.steam/debian-installation/compatibilitytools.d/
 ```
 
-Or use `proton-install --deploy <path>` (see below) to copy and set permissions in
+Or use `neutron-install --deploy <path>` (see below) to copy and set permissions in
 one step.
 
 Restart Steam, then go to a game's Properties → Compatibility → select your build.
 
 ---
 
+### 🔧 proton-builder — looni-proton_builder
+
+Builds **GE-Proton** or **proton-tkg** using their own upstream build systems —
+"delegated builds." Unlike neutron-builder (which compiles Wine, DXVK, and VKD3D from
+source), proton-builder clones the upstream project and runs *their* build scripts
+inside containers. The result is identical to what the upstream maintainer ships, but
+compiled locally on your machine.
+
+Both GE-Proton and proton-tkg bring their own container environments (Podman or
+Docker), so the only hard dependencies are `git`, `curl`, and a container engine.
+
+```bash
+proton-builder                              # interactive menu (ge, tkg, list, clean)
+proton-builder --source ge                  # build latest GE-Proton
+proton-builder --source tkg                 # build proton-tkg
+proton-builder --list                       # show completed builds
+proton-builder --clean                      # remove source checkouts & intermediates
+proton-builder --dry-run --source ge        # preview GE-Proton build steps
+```
+
+#### Build Sources
+
+| Key | Source | Notes |
+|-----|--------|-------|
+| `ge` | [GE-Proton](https://github.com/GloriousEggroll/proton-ge-custom) | GloriousEggroll's Proton fork — `configure.sh` + `make dist` inside the `umu-sdk` container |
+| `tkg` | [proton-tkg](https://github.com/Frogging-Family/wine-tkg-git) | Frogging-Family's proton-tkg — `proton-tkg.sh` with its own Valve SDK container |
+
+#### How It Works
+
+**GE-Proton:** Clones `proton-ge-custom`, checks out the latest release tag,
+runs `./configure.sh --container-engine=<engine> --build-name=<name>` followed by
+`make dist`. The build happens inside the `ghcr.io/open-wine-components/umu-sdk:latest`
+container. Output is copied to the install directory.
+
+**proton-tkg:** Clones `wine-tkg-git`, enters the `proton-tkg/` subdirectory, and
+runs `./proton-tkg.sh`. TKG handles its own container setup via the Valve SDK. The
+`proton-tkg.cfg` configuration file can be edited before the build starts.
+
+#### CLI Reference
+
+| Flag | Description |
+|------|-------------|
+| `--source ge` | Build GE-Proton from source |
+| `--source tkg` | Build proton-tkg from source |
+| `--build-name NAME` | Override the build name (default: auto from upstream tag) |
+| `--jobs N` | Parallel build jobs (default: `nproc`) |
+| `--container-engine ENG` | Force `podman` or `docker` (default: auto-detect) |
+| `--list` | List completed Proton builds |
+| `--clean` | Remove source checkouts and build intermediates |
+| `--dry-run` | Show what would happen without building |
+
+Build output lands in `~/.local/share/looni-proton_builder/buildz/install/`. Deploy
+with `proton-install --deploy <path>` or the interactive `proton-install` menu.
+
+---
+
+### 🚀 neutron-install — looni-neutron-install
+
+Deploys locally-built **Neutron packages** (from neutron-builder) into Steam's
+`compatibilitytools.d/` so they appear in the compatibility tool dropdown. This is the
+installer for neutron-builder's output — no download functionality, just local deploys.
+
+```bash
+neutron-install                             # interactive menu
+neutron-install --deploy PATH               # deploy a specific build directory
+neutron-install --list                      # list installed compatibility tools
+neutron-install --remove NAME               # remove an installed tool
+neutron-install --compat-dir DIR            # override compatibilitytools.d path
+neutron-install --dry-run                   # show planned actions
+```
+
+#### CLI Reference
+
+| Flag | Description |
+|------|-------------|
+| `--deploy PATH` | Deploy a Neutron build directory to compatibilitytools.d |
+| `--list` | List installed compatibility tools |
+| `--remove NAME` | Remove a named compatibility tool |
+| `--compat-dir DIR` | Override the auto-detected compatibilitytools.d path |
+| `--dry-run` | Print planned actions without executing |
+
+The interactive menu scans `~/.local/share/looni-neutron_builder/buildz/install/` for
+deployable packages (the same directory neutron-builder outputs to).
+
+---
+
 ### 🚀 proton-install — looni-proton-install
 
-Download and install pre-built Proton releases directly into Steam's
-`compatibilitytools.d/` — no building required. These are "delegated" builds you get
-from someone else (GE-Proton, any GitHub release tarball, etc.) rather than
-compiling yourself with neutron-builder. Also handles deploying locally-built
-neutron packages in one step.
+Download pre-built Proton releases and deploy locally-built Proton packages into
+Steam's `compatibilitytools.d/`. Handles GE-Proton downloads, any GitHub release
+tarball URL, and deploying proton-builder output — all in one step.
 
 ```bash
 proton-install                          # interactive menu
@@ -432,9 +523,9 @@ not have to manually `cp -r` and `chmod` packages yourself. It:
   Flatpak, etc.).
 - Downloads GE-Proton releases from the official GitHub releases page.
 - Accepts any direct download URL for other community Proton builds.
-- Deploys locally-built neutron packages via the `deploy-local` action /
-  `--deploy PATH` flag: copies the package directory into `compatibilitytools.d/`
-  and sets correct permissions.
+- Deploys locally-built Proton packages (from proton-builder) via the `deploy-local`
+  action / `--deploy PATH` flag: copies the package directory into
+  `compatibilitytools.d/` and sets correct permissions.
 - Lists currently installed compatibility tools with name and path.
 - Removes a named tool and its directory.
 
@@ -447,7 +538,7 @@ changes.
 |------|-------------|
 | `--install-ge` | Download and install the latest GE-Proton release |
 | `--install-url URL` | Download and install a Proton release from a direct URL (tar.gz / tar.xz / tar.zst) |
-| `--deploy PATH` | Deploy a locally-built package (neutron output, any compatible directory) into compatibilitytools.d |
+| `--deploy PATH` | Deploy a locally-built Proton package (proton-builder output, any compatible directory) into compatibilitytools.d |
 | `--list` | List installed compatibility tools |
 | `--remove NAME` | Remove a named compatibility tool |
 | `--compat-dir DIR` | Override the auto-discovered compatibilitytools.d path |
@@ -654,6 +745,12 @@ looni-build/
 │   ├── patches/                                Drop .patch/.diff files here
 │   └── deps-neutron-tkg                        TKG dependency list
 │
+├── looni-proton_builder/
+│   └── proton-builder.sh                       Delegated build wrapper (GE / TKG)
+│
+├── looni-neutron-install/
+│   └── neutron-install.sh                      Neutron package deployer
+│
 ├── looni-proton-install/
 │   └── proton-install.sh                       Proton downloader / deployer
 │
@@ -700,8 +797,10 @@ explicitly `make install PREFIX=/usr/local`.
 ~/.local/
 ├── bin/
 │   ├── looni-build             Main menu
-│   ├── neutron-builder         Proton builder
 │   ├── wine-builder            Wine builder
+│   ├── neutron-builder         Neutron builder
+│   ├── proton-builder          Delegated Proton builder (GE / TKG)
+│   ├── neutron-install         Neutron package deployer
 │   ├── proton-install          Proton downloader / deployer
 │   ├── wine_toolz              winetoolz GUI
 │   ├── wine-proton_hybrid      Hybrid installer
@@ -709,6 +808,7 @@ explicitly `make install PREFIX=/usr/local`.
 └── lib/
     ├── looni-neutron_builder/  Engine scripts + patches/
     ├── looni-wine_builder/     Engine scripts + patches/
+    ├── looni-neutron-install/  neutron-install script
     ├── looni-proton-install/   proton-install script
     ├── looni-wine-proton_hybrid_builder/
     └── looni-winetoolz/        Modules + shared_lib/
@@ -726,9 +826,14 @@ explicitly `make install PREFIX=/usr/local`.
 │
 ├── looni-neutron_builder/
 │   ├── buildz/
-│   │   ├── install/            Completed Proton packages
+│   │   ├── install/            Completed Neutron packages
 │   │   └── build-run/          In-progress builds
 │   └── src/                    Git clones (proton-wine, dxvk, vkd3d-proton)
+│
+├── looni-proton_builder/
+│   ├── buildz/
+│   │   └── install/            Completed Proton builds (GE / TKG)
+│   └── src/                    Git clones (proton-ge-custom, wine-tkg-git)
 │
 └── looni-wine-installs/        Managed Wine installations (Wine Install Manager)
     ├── wine-staging-10.5/
@@ -767,11 +872,15 @@ explicitly `make install PREFIX=/usr/local`.
 
 ## Building with Containers (Recommended)
 
-**Containers are the recommended way to build Wine and Proton.** They provide a
+**Containers are the recommended way to build Wine and Neutron.** They provide a
 clean, reproducible Ubuntu 24.04 environment with every dependency pre-installed —
 no risk of polluting your host system with hundreds of dev packages.
 
-Both builders ship their own Containerfiles:
+**proton-builder** also uses containers, but differently — GE-Proton and proton-tkg
+bring their *own* container environments. proton-builder just needs a container engine
+installed (Podman or Docker) and the upstream scripts handle the rest.
+
+The wine-builder and neutron-builder ship their own Containerfiles:
 
 | Builder | Containerfile | Image name |
 |---------|--------------|------------|
@@ -805,7 +914,7 @@ podman run --rm -it \
     bash wine-builder.sh --source staging
 ```
 
-### Proton Builder Container
+### Neutron Builder Container
 
 **Build the image** (once):
 
@@ -834,10 +943,10 @@ podman run --rm -it \
 
 - **Build args** (`BUILD_USER`, `BUILD_UID`, `BUILD_GID`) match your host user so
   bind-mounted files have correct ownership — no root permission headaches.
-- **ccache volume** — the proton container example uses a named volume for ccache.
+- **ccache volume** — the neutron container example uses a named volume for ccache.
   This persists across runs so rebuilds are dramatically faster.
 - **Image size** is ~5–6 GB. Only rebuild when the Containerfile changes.
-- **ntsync header** — the proton container includes a bundled `ntsync.h` (Linux 6.14+
+- **ntsync header** — the neutron container includes a bundled `ntsync.h` (Linux 6.14+
   kernel header) since Ubuntu 24.04's `linux-libc-dev` predates ntsync. No manual
   download needed. Configure detects it automatically and compiles ntsync support in.
 - All interactive features (fzf pickers, version selectors) work inside the container
@@ -865,7 +974,7 @@ sudo pacman -S podman              # Arch
 | Tool | Used by | Notes |
 |------|---------|-------|
 | `bash` 4.4+ | All | Required |
-| `git` | wine-builder, neutron-builder | Source fetching |
+| `git` | wine-builder, neutron-builder, proton-builder | Source fetching |
 | `zenity` | winetoolz, Wine Install Manager | GUI dialogs |
 | `fzf` | All builders, main menu | Optional — nicer interactive pickers |
 
@@ -887,8 +996,9 @@ sudo pacman -S podman              # Arch
 |------|---------|
 | `rsync` | wine-proton_hybrid, Wine Install Manager |
 | `python3` | neutron launcher, wine-proton_hybrid |
-| `curl` | winetoolz, proton-install (GitHub release downloads) |
+| `curl` | winetoolz, proton-install, proton-builder (GitHub release downloads) |
 | `tar`, `zstd` | winetoolz, proton-install (archive extraction) |
+| `podman` or `docker` | proton-builder (container engine for delegated builds) |
 
 ### One-Liner (Debian/Ubuntu)
 
@@ -913,8 +1023,9 @@ clean up `~/.bashrc` entries.
 
 **Config files** in `~/.config/looni-build/` are **kept** — remove manually if wanted.
 
-**Build output** in `~/.local/share/looni-wine_builder/` and
-`~/.local/share/looni-neutron_builder/` is **kept** — these are your compiled builds.
+**Build output** in `~/.local/share/looni-wine_builder/`,
+`~/.local/share/looni-neutron_builder/`, and
+`~/.local/share/looni-proton_builder/` is **kept** — these are your compiled builds.
 
 **Managed Wine installs** in `~/.local/share/looni-wine-installs/` are **kept** —
 use the Wine Install Manager to remove individual builds first, or delete the

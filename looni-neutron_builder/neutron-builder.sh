@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ╔═════════════════════════════════════════════════════════════════════════════╗
 # ║            looni-neutron_builder  •  multi-component  v1.0.0               ║
-# ║          proton-wine  •  DXVK  •  VKD3D-Proton  •  Steam package          ║
+# ║   WineHQ  •  proton-wine  •  DXVK  •  VKD3D-Proton  •  Steam package      ║
 # ╚═════════════════════════════════════════════════════════════════════════════╝
 #
 # Entry point for building a custom Proton compatibility tool for Steam.
@@ -10,7 +10,7 @@
 #   • proton-wine  — Valve's Wine fork, compiled with --with-mingw + Proton flags
 #   • Packaging    — Steam-loadable Proton layout (compatibilitytool.vdf etc.)
 #
-# Phase 2 (coming next):
+# Components:
 #   • DXVK        — D3D9/10/11 → Vulkan (neutron-dxvk-build.sh)
 #   • VKD3D-Proton — D3D12 → Vulkan (neutron-vkd3d-build.sh)
 #
@@ -121,32 +121,48 @@ WOLF
 
 # ── Wine source (required, pick one) ─────────────────────────────────────────
 declare -A WINE_SOURCE_URL=(
+    [mainline]="https://gitlab.winehq.org/wine/wine.git"
+    [experimental]="https://gitlab.winehq.org/wine/wine.git"
+    [staging]="https://gitlab.winehq.org/wine/wine.git"
     [proton-wine]="https://github.com/ValveSoftware/wine.git"
     [proton-wine-experimental]="https://github.com/ValveSoftware/wine.git"
     [kron4ek-tkg]="https://github.com/Kron4ek/wine-tkg.git"
 )
 declare -A WINE_SOURCE_BRANCH=(
+    [mainline]=""              # version picker selects the tag (wine-X.Y)
+    [experimental]="master"   # WineHQ bleeding edge
+    [staging]=""               # version picker queries wine-staging tags; clone at matching mainline tag
     [proton-wine]=""              # version picker selects the branch (proton_X.Y)
     [proton-wine-experimental]="bleeding-edge"
     [kron4ek-tkg]=""              # default branch tracks latest Wine + staging + TKG + ntsync
 )
 declare -A WINE_SOURCE_DESC=(
+    [mainline]="WineHQ mainline       — official stable releases (version picker)"
+    [experimental]="WineHQ experimental   — bleeding-edge master branch"
+    [staging]="WineHQ + Staging      — mainline + community patches (version picker)"
     [proton-wine]="Valve proton-wine     — stable branches (version picker)"
     [proton-wine-experimental]="Valve proton-wine exp  — bleeding-edge (no version picker)"
     [kron4ek-tkg]="Kron4ek wine-tkg      — Wine source tree with Staging + TKG + ntsync patches"
 )
-# Valve uses branches (proton_9.0, proton_8.0 …), not tags
 declare -A WINE_SOURCE_HAS_VERSIONS=(
+    [mainline]="true"
+    [staging]="true"          # queries wine-staging repo for tags, then clones matching mainline
     [proton-wine]="true"
     [kron4ek-tkg]="true"
 )
 declare -A WINE_SOURCE_VERSION_REF_TYPE=(
-    [proton-wine]="heads"   # branches, not tags
-    [kron4ek-tkg]="tags"    # standard wine-X.Y tags
+    [mainline]="tags"         # wine-X.Y tags
+    [staging]="tags"          # staging version picker queries wine-staging repo separately
+    [proton-wine]="heads"     # branches, not tags
+    [kron4ek-tkg]="tags"      # standard wine-X.Y tags
 )
-WINE_SOURCE_KEYS=( proton-wine proton-wine-experimental kron4ek-tkg )
+# Sources that need wine-staging patches applied after clone
+declare -A WINE_SOURCE_NEEDS_STAGING=(
+    [staging]="true"
+)
+WINE_SOURCE_KEYS=( mainline experimental staging proton-wine proton-wine-experimental kron4ek-tkg )
 
-# ── DXVK source (optional, Phase 2) ──────────────────────────────────────────
+# ── DXVK source ──────────────────────────────────────────────────────────────
 declare -A DXVK_SOURCE_URL=(
     [dxvk]="https://github.com/doitsujin/dxvk.git"
     [dxvk-async]="https://github.com/Sporif/dxvk-async.git"
@@ -160,7 +176,7 @@ declare -A DXVK_SOURCE_DESC=(
     [none]="None         — skip DXVK (falls back to WineD3D for D3D9/10/11)"
 )
 
-# ── VKD3D-Proton source (optional, Phase 2) ───────────────────────────────────
+# ── VKD3D-Proton source ───────────────────────────────────────────────────────
 declare -A VKD3D_SOURCE_URL=(
     [vkd3d-proton]="https://github.com/HansKristian-Work/vkd3d-proton.git"
     [vkd3d-proton-release]=""   # download pre-built binaries from GitHub releases
@@ -194,6 +210,7 @@ RESUME=false
 SKIP_WINE_BUILD=false      # set by --dxvk-only / --vkd3d-only
 SKIP_DXVK=false           # set by --vkd3d-only
 REINSTALL_COMPONENTS=false # set by --reinstall-components
+SNIPER_MODE=false          # set by --sniper (Steam Runtime Sniper container)
 CONTAINER_BUILD=""         # "" = ask interactively; "true" = container; "false" = native
 DRY_RUN=0
 CUSTOM_CFG="${_CFG_DIR}/neutron-customization.cfg"
@@ -201,6 +218,9 @@ BUILD_CORE="${_LIB_DIR}/neutron-build-core.sh"
 PACKAGER="${_LIB_DIR}/neutron-package.sh"
 DXVK_BUILDER="${_LIB_DIR}/neutron-dxvk-build.sh"
 VKD3D_BUILDER="${_LIB_DIR}/neutron-vkd3d-build.sh"
+PATCHER="${_LIB_DIR}/neutron-patcher.sh"
+PATCHES_DIR="${_LIB_DIR}/patches"
+PATCH_GROUPS=""            # space-separated group names, "all", "none", or "" (interactive)
 
 # ── Build tuning toggles ──────────────────────────────────────────────────────
 NO_CCACHE=false           # --no-ccache: disable ccache entirely
@@ -217,8 +237,9 @@ print_usage() {
 ${C_B}Usage:${C_R} $0 [options]
 
 ${C_B}Wine source (required):${C_R}
-  --source NAME         proton-wine | proton-wine-experimental
-  --branch BRANCH       Pin proton-wine to a specific branch (e.g. proton_9.0)
+  --source NAME         mainline | experimental | staging |
+                        proton-wine | proton-wine-experimental | kron4ek-tkg
+  --branch BRANCH       Pin to a specific branch or tag (e.g. proton_9.0, wine-10.6)
                         Skips the interactive version picker when provided.
   --no-pull             Skip git pull on an existing source tree
 
@@ -254,6 +275,11 @@ ${C_B}Build options:${C_R}
                         DLLs from src/*/build/ into the package and re-run the packager.
                         Use this after a Wine-only rebuild to restore DXVK/VKD3D.
   --cfg PATH            Alternate neutron-customization.cfg
+  --patches GROUPS      Patch groups to apply (comma-separated, "all", or "none")
+                        Interactive picker if omitted. Groups: ntsync, performance,
+                        fullscreen-hack, mouse-fixes, game-fixes, media-foundation
+  --patches-dir PATH    Alternate patches directory (default: alongside this script)
+  --sniper              Enable Steam Runtime Sniper mode (container isolation)
 
 ${C_B}General:${C_R}
   --list                Show all installed Proton builds
@@ -262,18 +288,21 @@ ${C_B}General:${C_R}
 
 ${C_B}Examples:${C_R}
   $0                                          # interactive source + version menu
-  $0 --source proton-wine                     # interactive version picker
+  $0 --source mainline                        # WineHQ stable (version picker)
+  $0 --source staging                         # WineHQ + staging patches (version picker)
+  $0 --source experimental                    # WineHQ bleeding-edge master
+  $0 --source proton-wine                     # Valve proton-wine (version picker)
   $0 --source proton-wine --branch proton_9.0 # pin to proton_9.0
-  $0 --source proton-wine-experimental        # bleeding edge, no picker
+  $0 --source kron4ek-tkg                     # Kron4ek wine-tkg + ntsync
   $0 --source proton-wine --dxvk none         # Wine only, no DXVK
-  $0 --source proton-wine --jobs 16           # more threads
+  $0 --source mainline --jobs 16              # more threads
   $0 --source proton-wine --resume            # resume an interrupted build
 
-${C_B}Phase 2 note:${C_R}
-  DXVK and VKD3D-Proton builds (--dxvk, --vkd3d) are wired into the pipeline
-  but are not yet compiled.  neutron-dxvk-build.sh and neutron-vkd3d-build.sh
-  contain the Phase 2 framework.  The packager (neutron-package.sh) already
-  knows where to slot them in when they become available.
+${C_B}DXVK / VKD3D-Proton:${C_R}
+  DXVK and VKD3D-Proton are compiled from source by default alongside Wine.
+  Use --dxvk dxvk-release / --vkd3d vkd3d-proton-release to download pre-built
+  binaries from GitHub instead (faster, no meson/ninja deps needed).
+  Use --dxvk none / --vkd3d none to skip them entirely.
 
 ${C_B}Steam installation:${C_R}
   After a successful build, copy the package directory from:
@@ -323,6 +352,9 @@ while [ "$#" -gt 0 ]; do
             [ -n "$_KRON4EK_REDIST_PKG" ] && shift || true
             ;;
         --cfg)          CUSTOM_CFG="$2";         shift 2 ;;
+        --patches)      PATCH_GROUPS="$2";       shift 2 ;;
+        --patches-dir)  PATCHES_DIR="$2";        shift 2 ;;
+        --sniper)       SNIPER_MODE=true;        shift   ;;
         --dry-run)      DRY_RUN=1;               shift   ;;
         --list)         _LIST_MODE=true;         shift   ;;
         -h|--help)      print_usage; exit 0               ;;
@@ -382,11 +414,11 @@ check_deps() {
         fi
     done
 
-    # glslangValidator (for DXVK in Phase 2, but warn now)
+    # glslangValidator (needed for DXVK compilation)
     if command -v glslangValidator >/dev/null 2>&1; then
         ok "glslangValidator"
     else
-        warn "glslangValidator not found (needed for DXVK in Phase 2)"
+        warn "glslangValidator not found (needed for DXVK compilation)"
         warn "  Install: sudo apt install glslang-tools"
     fi
 
@@ -460,20 +492,43 @@ pick_build_method() {
     _engine="$(_detect_container_engine)"
 
     section "Build method"
-    printf "  ${C_B}1) Native${C_R}        — build directly on this machine\n"
-    printf "                     ${C_DIM}Requires all build dependencies to be installed.${C_R}\n"
-    printf "  ${C_B}2) Container${C_R}     — build inside a Podman/Docker container\n"
-    printf "                     ${C_DIM}No local deps needed; image is ~5–6 GB (built once).${C_R}\n"
-    if [ -z "$_engine" ]; then
-        printf "                     ${C_YLW}(podman/docker not found — install one first)${C_R}\n"
+
+    local _native_desc="Native     — build directly on this machine (requires deps)"
+    local _container_desc="Container  — build inside Podman/Docker (no local deps)"
+    [ -n "$_engine" ] && _container_desc="${_container_desc}  [${_engine}]"
+    [ -z "$_engine" ] && _container_desc="${_container_desc}  (not available — install podman/docker)"
+
+    if command -v fzf >/dev/null 2>&1; then
+        local picked
+        picked=$(
+            printf 'native\t%s\n' "$_native_desc"
+            printf 'container\t%s\n' "$_container_desc"
+        ) && picked=$(
+            printf '%s\n' "$picked" \
+            | fzf \
+                --prompt="Build method > " \
+                --header="Select build method" \
+                --with-nth=2 \
+                --delimiter=$'\t' \
+                --height=10% \
+                --border \
+            || true
+        )
+        [ -n "$picked" ] || { CONTAINER_BUILD=false; ok "Build method: native (default)"; return 0; }
+        local _key; _key="$(printf '%s' "$picked" | cut -d$'\t' -f1)"
     else
-        printf "                     ${C_DIM}Detected: ${_engine}${C_R}\n"
+        printf "  ${C_B}1) ${_native_desc}${C_R}\n"
+        printf "  ${C_B}2) ${_container_desc}${C_R}\n\n"
+        printf "  ${C_CYN}Build method [1=native, 2=container]:${C_R} "
+        local _pick; read -r _pick </dev/tty
+        case "$_pick" in
+            2) _key="container" ;;
+            *) _key="native" ;;
+        esac
     fi
-    printf "\n"
-    printf "  ${C_CYN}Build method [1=native, 2=container]:${C_R} "
-    local _pick; read -r _pick </dev/tty
-    case "$_pick" in
-        2)
+
+    case "$_key" in
+        container)
             if [ -z "$_engine" ]; then
                 err "No container engine found. Install podman or docker first.
      Podman (recommended): sudo apt install podman
@@ -576,6 +631,8 @@ _run_container_build() {
     [ "$RESUME" = "true" ]           && inner_args+=( "--resume" )
     [ "$NO_PULL" = "true" ]          && inner_args+=( "--no-pull" )
     [ "$DRY_RUN" -eq 1 ]            && inner_args+=( "--dry-run" )
+    [ "$SNIPER_MODE" = "true" ]      && inner_args+=( "--sniper" )
+    [ -n "$PATCH_GROUPS" ]           && inner_args+=( "--patches" "$PATCH_GROUPS" )
 
     # ── Resolve mount paths ──────────────────────────────────────────────
     # Two bind mounts:
@@ -617,11 +674,13 @@ _run_container_build() {
     _self="$(readlink -f "${BASH_SOURCE[0]}")"
 
     # ── Config file mount ──────────────────────────────────────────────
-    # Inside the container the source-tree layout detection sets _CFG_DIR
-    # to the WORKDIR — overlay the host cfg file so it's found there.
+    # Inside the container _CFG_DIR resolves to ~/.config/looni-build,
+    # so mount the host cfg file to that same path inside the container.
+    local container_cfg="/home/$(whoami)/.config/looni-build/neutron-customization.cfg"
     local -a cfg_mount=()
     if [ -f "$CUSTOM_CFG" ]; then
-        cfg_mount=( -v "${CUSTOM_CFG}:${container_home}/neutron-customization.cfg:ro,${vol_flag#:}" )
+        cfg_mount=( -v "${CUSTOM_CFG}:${container_cfg}:ro,${vol_flag#:}" )
+        inner_args+=( "--cfg" "$container_cfg" )
     fi
 
     # Only allocate a TTY when stdin is a real terminal; without this,
@@ -749,6 +808,7 @@ pick_wine_version() {
         local _tag_pattern
         case "$key" in
             kron4ek-tkg) _tag_pattern='^[0-9]+\.[0-9]' ;;
+            staging)     _tag_pattern='^v[0-9]+\.[0-9]' ;;
             *)           _tag_pattern='^wine-[0-9]+\.[0-9]' ;;
         esac
         if ! raw_refs=$(
@@ -801,6 +861,14 @@ pick_wine_version() {
                           ver="$v"
                           label="Kron4ek TKG Wine ${ver}  (tag: ${v})"
                           ;;
+                      mainline)
+                          ver="${v#wine-}"
+                          label="WineHQ ${ver}  (tag: ${v})"
+                          ;;
+                      staging)
+                          ver="${v#v}"
+                          label="Wine Staging ${ver}  (tag: ${v})"
+                          ;;
                       *)
                           ver="${v#proton_}"
                           label="Valve Proton ${ver}  (branch: ${v})"
@@ -837,6 +905,14 @@ pick_wine_version() {
             kron4ek-tkg)
                 ver="$v"
                 label="Kron4ek TKG Wine ${ver}  (tag: ${v})"
+                ;;
+            mainline)
+                ver="${v#wine-}"
+                label="WineHQ ${ver}  (tag: ${v})"
+                ;;
+            staging)
+                ver="${v#v}"
+                label="Wine Staging ${ver}  (tag: ${v})"
                 ;;
             *)
                 ver="${v#proton_}"
@@ -1504,7 +1580,7 @@ print_summary() {
         printf "  ${C_B}Wine version :${C_R} %s\n" "$wine_ver"
     fi
 
-    # Phase 2 component status — check actual DLL presence, not just source key
+    # Component status — check actual DLL presence, not just source key
     printf "\n  ${C_B}Component status:${C_R}\n"
     printf "    ${C_GRN}✓${C_R}  proton-wine   — built and installed\n"
     if [ "${DXVK_SOURCE_KEY}" = "none" ]; then
@@ -1512,14 +1588,26 @@ print_summary() {
     elif [ -n "$(find "${install_prefix}/files/lib64/wine/dxvk" -name '*.dll' 2>/dev/null | head -1)" ]; then
         printf "    ${C_GRN}✓${C_R}  DXVK          — installed (${DXVK_SOURCE_KEY})\n"
     else
-        printf "    ${C_YLW}◌${C_R}  DXVK          — Phase 2 (not yet built)\n"
+        printf "    ${C_YLW}◌${C_R}  DXVK          — will compile from source\n"
     fi
     if [ "${VKD3D_SOURCE_KEY}" = "none" ]; then
         printf "    ${C_DIM}-${C_R}  VKD3D-Proton  — skipped (--vkd3d none)\n"
     elif [ -n "$(find "${install_prefix}/files/lib64/wine/vkd3d-proton" -name '*.dll' 2>/dev/null | head -1)" ]; then
         printf "    ${C_GRN}✓${C_R}  VKD3D-Proton  — installed (${VKD3D_SOURCE_KEY})\n"
     else
-        printf "    ${C_YLW}◌${C_R}  VKD3D-Proton  — Phase 2 (not yet built)\n"
+        printf "    ${C_YLW}◌${C_R}  VKD3D-Proton  — will compile from source\n"
+    fi
+    if [ "${SNIPER_MODE}" = "true" ]; then
+        printf "    ${C_GRN}✓${C_R}  Sniper mode   — Steam Runtime 3.0 container isolation enabled\n"
+    else
+        printf "    ${C_DIM}-${C_R}  Sniper mode   — disabled (standard host mode)\n"
+    fi
+    if [ -f "${BUILD_RUN_DIR:-/dev/null}/neutron-patch.log" ]; then
+        local _pcount
+        _pcount="$(grep -c '✓' "${BUILD_RUN_DIR}/neutron-patch.log" 2>/dev/null || echo 0)"
+        printf "    ${C_GRN}✓${C_R}  Patches       — ${_pcount} patches applied\n"
+    elif [ -n "${PATCH_GROUPS:-}" ] && [ "$PATCH_GROUPS" != "none" ]; then
+        printf "    ${C_GRN}✓${C_R}  Patches       — groups: ${PATCH_GROUPS}\n"
     fi
 
     printf "\n  ${C_B}To use with Steam:${C_R}\n"
@@ -1543,7 +1631,7 @@ pick_source() {
             done \
             | fzf \
                 --prompt="Wine source > " \
-                --header="Select a proton-wine source" \
+                --header="Select a Wine source for Neutron" \
                 --with-nth=2 \
                 --delimiter=$'\t' \
                 --height=20% \
@@ -1553,7 +1641,7 @@ pick_source() {
         [ -n "$picked" ] || err "No source selected."
         WINE_SOURCE_KEY="$(printf '%s' "$picked" | cut -d$'\t' -f1)"
     else
-        printf "\n  ${C_B}Select a proton-wine source:${C_R}\n\n"
+        printf "\n  ${C_B}Select a Wine source:${C_R}\n\n"
         PS3="  Source: "
         local -a menu_keys=()
         local -a menu_desc=()
@@ -1650,6 +1738,33 @@ if [ -z "${VKD3D_SOURCE_URL[$VKD3D_SOURCE_KEY]+x}" ]; then
     err "Unknown --vkd3d: '${VKD3D_SOURCE_KEY}'
  Valid options: vkd3d-proton | none"
 fi
+
+# ── Steam Runtime Sniper mode ─────────────────────────────────────────────────
+# If not set via --sniper, ask interactively
+if [ "$SNIPER_MODE" = "false" ] && [ -t 0 ]; then
+    _sniper_items=(
+        "no\tStandard mode — runs on host (broader compatibility)"
+        "yes\tSniper mode — runs inside Steam Runtime 3.0 container (SteamOS-like isolation)"
+    )
+    if command -v fzf >/dev/null 2>&1; then
+        _sniper_choice="$(printf '%s\n' "${_sniper_items[@]}" \
+            | fzf --prompt="Steam Runtime Sniper mode? " \
+                  --header="Enable Steam Runtime container isolation?" \
+                  --height=10% --reverse --delimiter=$'\t' --with-nth=2 \
+            | cut -f1)" || true
+    else
+        printf "\n  ${C_B}Steam Runtime Sniper mode?${C_R}\n"
+        printf "    1) Standard mode — runs on host (broader compatibility)\n"
+        printf "    2) Sniper mode — Steam Runtime 3.0 container isolation\n"
+        read -rp "  Choice [1-2, default=1]: " _sniper_choice
+        case "$_sniper_choice" in
+            2) _sniper_choice="yes" ;;
+            *) _sniper_choice="no"  ;;
+        esac
+    fi
+    [ "$_sniper_choice" = "yes" ] && SNIPER_MODE=true
+fi
+msg2 "Sniper mode: ${SNIPER_MODE}"
 
 # ── Build method (native vs container) ────────────────────────────────────────
 pick_build_method
@@ -1813,20 +1928,43 @@ mkdir -p "$DEST_ROOT" "$SRC_ROOT" "$BUILD_RUN_DIR" "$WINE_INSTALL_PREFIX"
 _wine_branch="${WINE_SOURCE_BRANCH[$WINE_SOURCE_KEY]}"
 [ -n "$WINE_SOURCE_BRANCH_ARG" ] && _wine_branch="$WINE_SOURCE_BRANCH_ARG"
 
-# Interactive version picker (only for proton-wine stable, not experimental)
-pick_wine_version "${WINE_SOURCE_URL[$WINE_SOURCE_KEY]}" "$WINE_SOURCE_KEY"
+# Interactive version picker
+# Special case: staging queries the wine-staging repo for version tags (v10.4 etc.)
+# rather than mainline WineHQ, then we clone mainline at the matching tag.
+if [ "$WINE_SOURCE_KEY" = "staging" ]; then
+    _staging_query_url="https://github.com/wine-staging/wine-staging.git"
+    pick_wine_version "$_staging_query_url" "$WINE_SOURCE_KEY"
+    # _wine_branch is now e.g. "v10.4" — convert to mainline tag "wine-10.4"
+    if [ -n "$_wine_branch" ]; then
+        export STAGING_BRANCH="$_wine_branch"
+        _wine_branch="wine-${_wine_branch#v}"
+        msg2 "Staging tag ${STAGING_BRANCH} → cloning mainline at ${_wine_branch}"
+    fi
+else
+    pick_wine_version "${WINE_SOURCE_URL[$WINE_SOURCE_KEY]}" "$WINE_SOURCE_KEY"
+fi
 # _wine_branch may have been updated by pick_wine_version
 
-# ── Fetch proton-wine source ──────────────────────────────────────────────────
-section "Fetching proton-wine"
-# Full clone required: Valve's fork needs complete history for git describe
-# to produce proper version strings (wine-8.0-15630-gabcdef).
-msg2 "Full clone — required for Valve version strings (git describe)"
+# ── Fetch Wine source ────────────────────────────────────────────────────────
+section "Fetching Wine source"
+
+# Clone strategy: Valve's fork needs full history for git describe;
+# WineHQ sources can use shallow clones for speed.
+case "$WINE_SOURCE_KEY" in
+    proton-wine|proton-wine-experimental)
+        msg2 "Full clone — required for Valve version strings (git describe)"
+        _shallow="false"
+        ;;
+    *)
+        _shallow="true"
+        ;;
+esac
+
 fetch_source \
     "${WINE_SOURCE_URL[$WINE_SOURCE_KEY]}" \
     "$_wine_branch" \
     "$WINE_SOURCE_DIR" \
-    "false"
+    "$_shallow"
 
 [ -d "$WINE_SOURCE_DIR" ] || \
     err "Wine source directory not found after fetch: $WINE_SOURCE_DIR"
@@ -1834,6 +1972,91 @@ fetch_source \
 [ -f "${WINE_SOURCE_DIR}/configure.ac" ] || \
     err "configure.ac not found in: $WINE_SOURCE_DIR
      This does not look like a Wine source tree."
+
+# ── Apply neutron patch groups ────────────────────────────────────────────────
+if [ -x "$PATCHER" ] && [ -d "$PATCHES_DIR" ]; then
+    section "Neutron patch system"
+    export WINE_SOURCE_KEY PATCH_LOG="${BUILD_RUN_DIR}/neutron-patch.log" DRY_RUN
+    mkdir -p "$BUILD_RUN_DIR"
+
+    _patch_args=()
+    if [ -n "$PATCH_GROUPS" ]; then
+        # Convert comma-separated to space-separated args
+        IFS=',' read -ra _pg_list <<< "$PATCH_GROUPS"
+        _patch_args=("${_pg_list[@]}")
+    fi
+
+    "$PATCHER" "$WINE_SOURCE_DIR" "$PATCHES_DIR" "${_patch_args[@]}" || {
+        warn "Some patches may have failed — check ${BUILD_RUN_DIR}/neutron-patch.log"
+    }
+elif [ -d "$PATCHES_DIR" ] && [ ! -x "$PATCHER" ]; then
+    warn "neutron-patcher.sh not found or not executable: $PATCHER"
+    warn "Skipping patch application"
+fi
+
+# ── Apply wine-staging patches (staging source only) ─────────────────────────
+if [ "${WINE_SOURCE_NEEDS_STAGING[$WINE_SOURCE_KEY]:-false}" = "true" ]; then
+    section "Applying wine-staging patches"
+
+    # Locate the patcher script — check neutron's own copy first, then wine-builder's
+    _PATCHER=""
+    for _p in "${_LIB_DIR}/wine-tkg-patcher.sh" \
+              "${SCRIPT_DIR}/wine-tkg-patcher.sh" \
+              "${SCRIPT_DIR}/../looni-wine_builder/wine-tkg-patcher.sh" \
+              "${SCRIPT_DIR%/bin}/../looni-wine_builder/wine-tkg-patcher.sh"; do
+        [ -f "$_p" ] && { _PATCHER="$_p"; break; }
+    done
+
+    if [ -z "$_PATCHER" ]; then
+        # Inline fallback: clone wine-staging and apply via patchinstall.py
+        msg2 "wine-tkg-patcher.sh not found — applying staging patches inline"
+        _STAGING_CACHE="${SRC_ROOT}/wine-staging-patches"
+        _STAGING_URL="https://github.com/wine-staging/wine-staging.git"
+        _staging_ref="${STAGING_BRANCH:-}"
+
+        if [ -d "${_STAGING_CACHE}/.git" ]; then
+            msg2 "Updating staging cache..."
+            git -C "$_STAGING_CACHE" fetch --prune
+            [ -n "$_staging_ref" ] && git -C "$_STAGING_CACHE" checkout "$_staging_ref" --
+        else
+            msg2 "Cloning wine-staging → $_STAGING_CACHE"
+            mkdir -p "$(dirname "$_STAGING_CACHE")"
+            if [ -n "$_staging_ref" ]; then
+                git clone --depth=1 --branch "$_staging_ref" "$_STAGING_URL" "$_STAGING_CACHE"
+            else
+                git clone --depth=1 "$_STAGING_URL" "$_STAGING_CACHE"
+            fi
+        fi
+
+        _PATCHINSTALL="${_STAGING_CACHE}/staging/patchinstall.py"
+        if [ -f "$_PATCHINSTALL" ]; then
+            msg2 "Applying full staging patchset via patchinstall.py..."
+            _patch_log="${BUILD_RUN_DIR}/staging-patch.log"
+            (
+                cd "$_STAGING_CACHE"
+                python3 staging/patchinstall.py \
+                    --all \
+                    DESTDIR="$WINE_SOURCE_DIR" \
+                    >> "$_patch_log" 2>&1
+            ) || {
+                warn "Staging patch application had errors — see ${_patch_log}"
+                tail -10 "$_patch_log" >&2
+            }
+            ok "wine-staging patches applied"
+        else
+            warn "patchinstall.py not found in staging cache — skipping patches"
+        fi
+    else
+        # Use the shared patcher from wine-builder
+        msg2 "Using patcher: $_PATCHER"
+        [ -x "$_PATCHER" ] || chmod +x "$_PATCHER"
+        export DRY_RUN NO_PULL
+        export PATCH_LOG="${BUILD_RUN_DIR}/staging-patch.log"
+        export STAGING_BRANCH_HINT="${_wine_branch:-}"
+        mkdir -p "$BUILD_RUN_DIR"
+        "$_PATCHER" "$WINE_SOURCE_DIR" "${SRC_ROOT}/wine-staging-patches"
+    fi
+fi
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  _download_dxvk_release  — install pre-built DXVK DLLs from GitHub releases
@@ -1922,9 +2145,9 @@ print(url)")
     ok "VKD3D-Proton ${version} installed: ${c64} x64 DLLs, ${c32} x86 DLLs"
 }
 
-# ── PHASE 2 HOOK: Fetch DXVK ─────────────────────────────────────────────────
+# ── Fetch DXVK ────────────────────────────────────────────────────────────────
 if [ "${DXVK_SOURCE_KEY}" != "none" ] && [ "${DXVK_SOURCE_KEY}" != "dxvk-release" ]; then
-    section "DXVK source  [Phase 2]"
+    section "DXVK source  "
     DXVK_SOURCE_DIR="${SRC_ROOT}/dxvk-${DXVK_SOURCE_KEY}"
     _dxvk_branch="${DXVK_BRANCH_ARG:-}"
     msg2 "Source key : ${DXVK_SOURCE_KEY}"
@@ -1939,9 +2162,9 @@ if [ "${DXVK_SOURCE_KEY}" != "none" ] && [ "${DXVK_SOURCE_KEY}" != "dxvk-release
     export DXVK_SOURCE_DIR DXVK_SOURCE_KEY
 fi
 
-# ── PHASE 2 HOOK: Fetch VKD3D-Proton ─────────────────────────────────────────
+# ── Fetch VKD3D-Proton ────────────────────────────────────────────────────────
 if [ "${VKD3D_SOURCE_KEY}" != "none" ] && [ "${VKD3D_SOURCE_KEY}" != "vkd3d-proton-release" ]; then
-    section "VKD3D-Proton source  [Phase 2]"
+    section "VKD3D-Proton source  "
     VKD3D_SOURCE_DIR="${SRC_ROOT}/vkd3d-proton"
     _vkd3d_branch="${VKD3D_BRANCH_ARG:-}"
     msg2 "Source key : ${VKD3D_SOURCE_KEY}"
@@ -1994,9 +2217,15 @@ else
     [ -x "$PACKAGER" ] || chmod +x "$PACKAGER"
 
     # ── Load configuration ──────────────────────────────────────────────────
+    # Fallback: if the cfg isn't in _CFG_DIR, check alongside the script
+    if [ ! -f "$CUSTOM_CFG" ] && [ -f "${_LIB_DIR}/neutron-customization.cfg" ]; then
+        CUSTOM_CFG="${_LIB_DIR}/neutron-customization.cfg"
+        msg2 "Config found alongside script: $CUSTOM_CFG"
+    fi
     [ -f "$CUSTOM_CFG" ] || \
         err "Configuration file not found: $CUSTOM_CFG
-     Copy and edit neutron-customization.cfg — see the README for details."
+     Copy and edit neutron-customization.cfg — see the README for details.
+     (HOME=$HOME, _CFG_DIR=$_CFG_DIR, _LIB_DIR=$_LIB_DIR)"
     # shellcheck source=/dev/null
     source "$CUSTOM_CFG"
 
@@ -2025,15 +2254,14 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PHASE 2 HOOK: Build DXVK
+#  Build DXVK
 #
-#  When neutron-dxvk-build.sh is implemented, it will be called here.
-#  It receives the DXVK source dir and the Proton package dir, compiles
-#  DXVK with Meson + MinGW, and places the .dll files under:
+#  Calls neutron-dxvk-build.sh to cross-compile DXVK with Meson + MinGW.
+#  Output .dll files are placed under:
 #    ${NEUTRON_PACKAGE_DIR}/files/lib/wine/dxvk/   (32-bit)
 #    ${NEUTRON_PACKAGE_DIR}/files/lib64/wine/dxvk/  (64-bit)
 # ══════════════════════════════════════════════════════════════════════════════
-section "DXVK build  [Phase 2]"
+section "DXVK build  "
 if [ "${SKIP_DXVK:-false}" = "true" ]; then
     msg2 "Skipping DXVK (--vkd3d-only)"
 elif [ "${REINSTALL_COMPONENTS:-false}" = "true" ]; then
@@ -2066,23 +2294,22 @@ elif [ "${DXVK_SOURCE_KEY}" != "none" ]; then
         export NEUTRON_PACKAGE_DIR
         "$DXVK_BUILDER"
     else
-        warn "DXVK build (Phase 2) — neutron-dxvk-build.sh not yet implemented"
-        warn "D3D9/D3D10/D3D11 games will fall back to WineD3D (software Vulkan wrapper)"
-        warn "DXVK source is available at: ${DXVK_SOURCE_DIR:-${SRC_ROOT}/dxvk-${DXVK_SOURCE_KEY}}"
+        warn "neutron-dxvk-build.sh not found or not executable: $DXVK_BUILDER"
+        warn "D3D9/D3D10/D3D11 games will fall back to WineD3D (slower)"
+        warn "Try: --dxvk dxvk-release  to download pre-built DLLs instead"
     fi
 else
     msg2 "DXVK skipped (--dxvk none)"
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PHASE 2 HOOK: Build VKD3D-Proton
+#  Build VKD3D-Proton
 #
-#  When neutron-vkd3d-build.sh is implemented, it will be called here.
 #  It compiles VKD3D-Proton with Meson + MinGW and places d3d12.dll under:
 #    ${NEUTRON_PACKAGE_DIR}/files/lib/wine/vkd3d-proton/   (32-bit)
 #    ${NEUTRON_PACKAGE_DIR}/files/lib64/wine/vkd3d-proton/  (64-bit)
 # ══════════════════════════════════════════════════════════════════════════════
-section "VKD3D-Proton build  [Phase 2]"
+section "VKD3D-Proton build  "
 if [ "${REINSTALL_COMPONENTS:-false}" = "true" ]; then
     section "VKD3D-Proton reinstall from existing build"
     _vkd3d_build_64="${SRC_ROOT}/vkd3d-proton/build/x64"
@@ -2113,9 +2340,9 @@ elif [ "${VKD3D_SOURCE_KEY}" != "none" ]; then
         export NEUTRON_PACKAGE_DIR
         "$VKD3D_BUILDER"
     else
-        warn "VKD3D-Proton build (Phase 2) — neutron-vkd3d-build.sh not yet implemented"
-        warn "DirectX 12 games will not work until Phase 2 is complete"
-        warn "VKD3D-Proton source is available at: ${VKD3D_SOURCE_DIR:-${SRC_ROOT}/vkd3d-proton}"
+        warn "neutron-vkd3d-build.sh not found or not executable: $VKD3D_BUILDER"
+        warn "DirectX 12 games will not work without VKD3D-Proton"
+        warn "Try: --vkd3d vkd3d-proton-release  to download pre-built DLLs instead"
     fi
 else
     msg2 "VKD3D-Proton skipped (--vkd3d none)"
@@ -2127,7 +2354,7 @@ fi
 section "Packaging Proton"
 export NEUTRON_PACKAGE_DIR WINE_INSTALL_PREFIX
 export DXVK_SOURCE_KEY VKD3D_SOURCE_KEY
-export BUILD_NAME
+export BUILD_NAME SNIPER_MODE
 "$PACKAGER"
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2158,3 +2385,9 @@ _ELAPSED=$(( _BUILD_END - _BUILD_START ))
 _ELAPSED_FMT="$(( _ELAPSED / 3600 ))h $(( (_ELAPSED % 3600) / 60 ))m $(( _ELAPSED % 60 ))s"
 print_summary "$NEUTRON_PACKAGE_DIR" "$_ELAPSED_FMT"
 _write_build_manifest "$NEUTRON_PACKAGE_DIR" "$_ELAPSED_FMT"
+
+# Pause so the user can read the summary if the terminal would close on exit
+if [ -t 0 ]; then
+    printf "\n${C_DIM}Press Enter to exit...${C_R}"
+    read -r
+fi

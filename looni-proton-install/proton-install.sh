@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
 # ╔═════════════════════════════════════════════════════════════════════════════╗
-# ║         looni-build  •  proton-install  —  Proton Delegated Installs       ║
-# ║         Download & deploy pre-built Proton tools to Steam                  ║
+# ║         looni-build  •  proton-install  —  Proton Installs                 ║
+# ║         Download, deploy & manage Proton tools for Steam                   ║
 # ╚═════════════════════════════════════════════════════════════════════════════╝
 #
-# "Delegated installs" means pre-built Proton releases that you delegate to
-# someone else to maintain (GloriousEggroll, Valve, etc.), as opposed to
-# looni-neutron_builder where you compile everything yourself.
-#
-# This script handles two workflows:
+# This script handles Proton-specific installs:
 #   1. Fetch & install a pre-built release (GE-Proton, custom URL, etc.) directly
 #      into Steam's compatibilitytools.d/ so it shows up in the compatibility
 #      tool dropdown immediately.
-#   2. Deploy a locally-built looni-neutron package from your build output
+#   2. Deploy a locally-built looni-proton package from your build output
 #      directory into compatibilitytools.d/ without having to manually copy files.
 #
 # Usage:  ./proton-install.sh [options]
@@ -72,7 +68,7 @@ WOLF
     printf "  ╔═══════════════════════════════════════════════════════════════╗\n"
     printf "  ║                                                               ║\n"
     printf "  ║  :3 looni-build  •  proton-install                           ║\n"
-    printf "  ║      Proton Delegated Installs  •  GE  •  custom  •  local   ║\n"
+    printf "  ║      Proton Installs  •  GE  •  custom  •  local             ║\n"
     printf "  ║                                                               ║\n"
     printf "  ╚═══════════════════════════════════════════════════════════════╝\n"
     printf "${C_R}\n"
@@ -88,15 +84,15 @@ NONINTERACTIVE=0           # 1 when a CLI action flag is given
 
 # GE-Proton GitHub repo
 GE_REPO="GloriousEggroll/proton-ge-custom"
-GE_ASSET_PATTERN="GE-Proton.*\.tar\.gz$"
+GE_ASSET_PATTERN="GE-Proton.*\.tar\.gz"
 
-# Directories to scan for locally-built looni-neutron packages.
-# neutron-builder always writes to the XDG data dir regardless of whether
+# Directories to scan for locally-built looni-proton packages.
+# proton-builder writes to the XDG data dir regardless of whether
 # it is run from the source tree or after make install, so the first entry
 # covers both cases.
 LOCAL_BUILD_DIRS=(
-    "${XDG_DATA_HOME:-${HOME}/.local/share}/looni-neutron_builder/buildz/install"
-    "${HOME}/.local/share/looni-neutron_builder/buildz/install"
+    "${XDG_DATA_HOME:-${HOME}/.local/share}/looni-proton_builder/buildz/install"
+    "${HOME}/.local/share/looni-proton_builder/buildz/install"
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -564,17 +560,17 @@ action_install_url() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Action: deploy-local — copy a locally-built neutron package into
+#  Action: deploy-local — copy a locally-built proton package into
 #  compatibilitytools.d
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Return the list of candidate neutron packages found in LOCAL_BUILD_DIRS
+# Return the list of candidate proton packages found in LOCAL_BUILD_DIRS
 _find_local_packages() {
     for base_dir in "${LOCAL_BUILD_DIRS[@]}"; do
         [[ -d "$base_dir" ]] || continue
         for pkg_dir in "$base_dir"/*/; do
             [[ -d "$pkg_dir" ]] || continue
-            # A valid neutron package has toolmanifest.vdf or a 'neutron' launcher
+            # A valid proton package has toolmanifest.vdf or a 'proton' launcher
             if [[ -f "${pkg_dir}/toolmanifest.vdf" ]] \
                || [[ -f "${pkg_dir}/neutron" ]] \
                || [[ -f "${pkg_dir}/proton" ]]; then
@@ -595,7 +591,7 @@ action_deploy_local() {
         src="${src%/}"   # strip trailing slash
     else
         # Interactive: scan for packages and present a picker
-        section "Local neutron packages"
+        section "Local Proton packages"
         local -a candidates=()
         while IFS= read -r line; do
             [[ -n "$line" ]] && candidates+=("$line")
@@ -607,7 +603,7 @@ action_deploy_local() {
             for d in "${LOCAL_BUILD_DIRS[@]}"; do
                 dim "    ${d}"
             done
-            err "Nothing to deploy. Build something with looni-neutron_builder first."
+            err "Nothing to deploy. Build something with proton-builder first."
         fi
 
         if command -v fzf >/dev/null 2>&1; then
@@ -621,7 +617,7 @@ action_deploy_local() {
                 done \
                 | fzf \
                     --prompt="Package > " \
-                    --header="Select a local neutron package to deploy" \
+                    --header="Select a local Proton package to deploy" \
                     --with-nth=2 \
                     --delimiter=$'\t' \
                     --height=25% \
@@ -632,7 +628,7 @@ action_deploy_local() {
             src="$(printf '%s' "$picked" | cut -d$'\t' -f1)"
             src="${src%/}"
         else
-            printf "\n  ${C_B}Select a local neutron package:${C_R}\n\n"
+            printf "\n  ${C_B}Select a local Proton package:${C_R}\n\n"
             PS3="  Package: "
             local i=1
             local -a labels=()
@@ -833,7 +829,7 @@ action_remove() {
 declare -A _MENU_DESC=(
     [install-ge]="install-ge      — Download & install latest GE-Proton"
     [install-url]="install-url     — Install from a custom URL (.tar.gz / .tar.xz / .tar.zst)"
-    [deploy-local]="deploy-local    — Deploy a locally-built looni-neutron package"
+    [deploy-local]="deploy-local    — Deploy a locally-built Proton package"
     [list]="list            — List all Proton tools in compatibilitytools.d"
     [remove]="remove          — Remove a Proton tool from compatibilitytools.d"
 )

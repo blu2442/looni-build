@@ -21,8 +21,11 @@ _find_tool() {
     case "$name" in
         wine-builder)       _bin="${SCRIPT_DIR}/looni-wine_builder/wine-builder.sh" ;;
         neutron-builder)    _bin="${SCRIPT_DIR}/looni-neutron_builder/neutron-builder.sh" ;;
+        neutron-install)    _bin="${SCRIPT_DIR}/looni-neutron-install/neutron-install.sh" ;;
+        proton-builder)     _bin="${SCRIPT_DIR}/looni-proton_builder/proton-builder.sh" ;;
         proton-install)     _bin="${SCRIPT_DIR}/looni-proton-install/proton-install.sh" ;;
-        wine-proton_hybrid) _bin="${SCRIPT_DIR}/looni-wine-proton_hybrid_builder/wine-proton_hybrid-v1.0.0.sh" ;;
+        wine-proton_hybrid)  _bin="${SCRIPT_DIR}/looni-wine-proton_hybrid_builder/wine-proton_hybrid-v1.0.0.sh" ;;
+        wine-neutron_hybrid) _bin="${SCRIPT_DIR}/looni-wine-neutron_hybrid_builder/wine-neutron_hybrid-v1.0.0.sh" ;;
         wine_toolz)         _bin="${SCRIPT_DIR}/looni-winetoolz/wine_toolz.sh" ;;
         wine_install_mgr)   _bin="${SCRIPT_DIR}/looni-winetoolz/modules/shared_lib/wine_install_manager.sh" ;;
     esac
@@ -32,6 +35,8 @@ _find_tool() {
     #    (SCRIPT_DIR is bin/; strip /bin to get prefix, then look in lib/)
     local _lib="${SCRIPT_DIR%/bin}/lib"
     case "$name" in
+        neutron-install)  _bin="${_lib}/looni-neutron-install/neutron-install.sh" ;;
+        proton-builder)   _bin="${_lib}/looni-proton_builder/proton-builder.sh" ;;
         proton-install)   _bin="${_lib}/looni-proton-install/proton-install.sh" ;;
         wine_toolz)       _bin="${_lib}/looni-winetoolz/wine_toolz.sh" ;;
         wine_install_mgr) _bin="${_lib}/looni-winetoolz/modules/shared_lib/wine_install_manager.sh" ;;
@@ -85,20 +90,26 @@ declare -A TOOL_KEY TOOL_DESC
 TOOL_KEY=(
     [1]="wine-builder"
     [2]="neutron-builder"
-    [3]="proton-install"
+    [3]="proton-builder"
     [4]="wine-proton_hybrid"
-    [5]="wine_toolz"
+    [5]="wine-neutron_hybrid"
     [6]="wine_install_mgr"
+    [7]="neutron-install"
+    [8]="proton-install"
+    [9]="wine_toolz"
 )
 TOOL_DESC=(
     [1]="🛠  wine-builder          — build Wine from source (mainline, staging, TKG, Valve…)"
-    [2]="🎮  neutron-builder       — build Proton (Valve, Kron4ek, GE, TKG variants…)"
-    [3]="🚀  proton-install        — download & deploy GE-Proton / pre-built Proton to Steam"
+    [2]="🎮  neutron-builder       — build Neutron (WineHQ, Valve, Kron4ek, staging…)"
+    [3]="🔧  proton-builder        — build Proton from source (GE, TKG build scripts…)"
     [4]="⇌   wine-proton_hybrid    — merge any Wine build over a Proton base"
-    [5]="⚙   wine_toolz            — GUI Wine toolkit (DXVK, prefixes, runtimes…)"
+    [5]="⇌   wine-neutron_hybrid   — merge any Wine build over a Neutron base"
     [6]="📦  wine_install_mgr      — install, switch, and manage custom Wine builds"
+    [7]="🚀  neutron-install       — deploy Neutron packages to Steam"
+    [8]="🚀  proton-install        — download & deploy GE-Proton / pre-built Proton to Steam"
+    [9]="⚙   wine_toolz            — GUI Wine toolkit (DXVK, prefixes, runtimes…)"
 )
-TOOL_KEYS=( wine-builder neutron-builder proton-install wine-proton_hybrid wine_toolz wine_install_mgr )
+TOOL_KEYS=( wine-builder neutron-builder proton-builder wine-proton_hybrid wine-neutron_hybrid wine_install_mgr neutron-install proton-install wine_toolz )
 
 # ── Launch + menu loop ────────────────────────────────────────────────────────
 _launch() {
@@ -152,7 +163,7 @@ while true; do
                 --header="Select a tool  (Esc or ← exit to quit)" \
                 --with-nth=2 \
                 --delimiter=$'\t' \
-                --height=19% \
+                --height=22% \
                 --border \
                 --border-label=" looni-build " \
                 --border-label-pos=3 \
@@ -163,14 +174,14 @@ while true; do
     else
         # Fallback: numbered menu
         printf "  ${C_B}Select a tool:${C_R}\n\n"
-        for idx in 1 2 3 4 5 6; do
+        for idx in 1 2 3 4 5 6 7 8 9; do
             printf "  ${C_CYN}%d)${C_R} %s\n" "$idx" "${TOOL_DESC[$idx]}"
         done
         printf "  ${C_CYN}q)${C_R}  Exit\n"
-        printf "\n  ${C_B}Choice [1-6, q]:${C_R} "
+        printf "\n  ${C_B}Choice [1-9, q]:${C_R} "
         read -r _choice
         case "$_choice" in
-            1|2|3|4|5|6) key="${TOOL_KEY[$_choice]}" ;;
+            1|2|3|4|5|6|7|8|9) key="${TOOL_KEY[$_choice]}" ;;
             q|Q|"")  printf "\n  ${C_DIM}Goodbye :3${C_R}\n\n"; exit 0 ;;
             *) printf "\n  ${C_MAG}Invalid choice.${C_R}\n\n"; continue ;;
         esac

@@ -90,13 +90,24 @@ ok "compatibilitytool.vdf written"
 #  The %verb% token is replaced by Steam at runtime with the action to perform
 #  (run, waitforexitandrun, runinprefix, etc.).
 #
-#  NOTE: "require_tool_appid" "1391110" would require the Steam Linux Runtime
-#  Sniper (SteamOS 3.x container). We omit it so this Proton runs without
-#  requiring the Steam Runtime container — broader host compatibility.
-#  Add it back if you want full Steam Runtime isolation.
+#  When SNIPER_MODE=true, we add "require_tool_appid" "1391110" which tells
+#  Steam to run this tool inside the Steam Linux Runtime Sniper container
+#  (SteamOS 3.x isolation). Without it, the tool runs directly on the host.
 # ══════════════════════════════════════════════════════════════════════════════
 sep "Writing toolmanifest.vdf"
-cat > "${NEUTRON_PACKAGE_DIR}/toolmanifest.vdf" << 'EOF'
+if [ "${SNIPER_MODE:-false}" = "true" ]; then
+    cat > "${NEUTRON_PACKAGE_DIR}/toolmanifest.vdf" << 'EOF'
+"manifest"
+{
+  "manifest_version"   "2"
+  "commandline"        "/neutron waitforexitandrun"
+  "use_sessions"       "1"
+  "require_tool_appid" "1391110"
+}
+EOF
+    ok "toolmanifest.vdf written (Sniper mode — Steam Runtime 3.0 container)"
+else
+    cat > "${NEUTRON_PACKAGE_DIR}/toolmanifest.vdf" << 'EOF'
 "manifest"
 {
   "manifest_version"   "2"
@@ -104,7 +115,8 @@ cat > "${NEUTRON_PACKAGE_DIR}/toolmanifest.vdf" << 'EOF'
   "use_sessions"       "1"
 }
 EOF
-ok "toolmanifest.vdf written"
+    ok "toolmanifest.vdf written (standard host mode)"
+fi
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  lsteamclient bootstrap
@@ -132,20 +144,85 @@ if [ -f "${_lsc_target}" ]; then
 else
     warn "lsteamclient.dll not found in Wine build; searching for Proton source..."
 
-    # Common locations for Proton Experimental across different Steam installs
-    _proton_candidates=(
-        "${HOME}/.steam/steam/steamapps/common/Proton - Experimental/files"
-        "${HOME}/.steam/debian-installation/steamapps/common/Proton - Experimental/files"
-        "${HOME}/.local/share/Steam/steamapps/common/Proton - Experimental/files"
-        "/stuff/SteamLibrary/steamapps/common/Proton - Experimental/files"
-        "/home/blu2442/.steam/debian-installation/steamapps/common/Proton - Experimental/files"
-    )
-    # Also search any SteamLibrary paths from the environment
+    # ── Discover Steam library roots ──────────────────────────────────
+    # Parse libraryfolders.vdf for all Steam library paths, then add
+    # well-known fallback roots in case the vdf is missing.
+    # When running as root (sudo), also check the real user's home.
+    _real_home="${HOME}"
+    if [ "$(id -u)" = "0" ] && [ -n "${SUDO_USER:-}" ]; then
+        _real_home="$(getent passwd "$SUDO_USER" 2>/dev/null | cut -d: -f6 || echo "$HOME")"
+    fi
+    _steam_roots=()
+    _vdf_candidates=()
+    for _h in "$HOME" "$_real_home"; do
+        _vdf_candidates+=(
+            "${_h}/.steam/steam/steamapps/libraryfolders.vdf"
+            "${_h}/.steam/debian-installation/steamapps/libraryfolders.vdf"
+            "${_h}/.local/share/Steam/steamapps/libraryfolders.vdf"
+        )
+    done
+    # Also check common system-wide paths
+    for _u in /home/*/; do
+        [ -d "$_u" ] || continue
+        _vdf_candidates+=("${_u}.steam/debian-installation/steamapps/libraryfolders.vdf")
+        _vdf_candidates+=("${_u}.steam/steam/steamapps/libraryfolders.vdf")
+    done
+    for _vdf in "${_vdf_candidates[@]}"; do
+        if [ -f "$_vdf" ]; then
+            while IFS= read -r _lpath; do
+                [ -n "$_lpath" ] && _steam_roots+=("$_lpath")
+            done < <(grep '"path"' "$_vdf" 2>/dev/null \
+                     | sed 's/.*"path"[[:space:]]*"\([^"]*\)".*/\1/')
+            break   # first valid vdf wins — they're usually symlinked
+        fi
+    done
+    # Fallback roots if vdf parsing found nothing
+    if [ ${#_steam_roots[@]} -eq 0 ]; then
+        _steam_roots=()
+        for _h in "$HOME" "$_real_home"; do
+            _steam_roots+=(
+                "${_h}/.steam/steam"
+                "${_h}/.steam/debian-installation"
+                "${_h}/.local/share/Steam"
+            )
+        done
+    fi
+    # Extra roots from the environment
     if [ -n "${STEAM_LIBRARY_PATHS:-}" ]; then
         while IFS= read -r _slib; do
-            _proton_candidates+=("${_slib}/steamapps/common/Proton - Experimental/files")
+            [ -n "$_slib" ] && _steam_roots+=("$_slib")
         done <<< "${STEAM_LIBRARY_PATHS}"
     fi
+
+    # ── Search for any installed Proton that has lsteamclient ──────
+    # Check multiple Proton variants, not just Experimental.
+    _proton_names=(
+        "Proton - Experimental"
+        "Proton Hotfix"
+        "Proton 9.0"
+        "Proton 8.0"
+    )
+    # Also glob for any "Proton*" directories we haven't listed
+    _proton_candidates=()
+    for _root in "${_steam_roots[@]}"; do
+        _common="${_root}/steamapps/common"
+        [ -d "$_common" ] || continue
+        # Named variants first (preferred order)
+        for _pname in "${_proton_names[@]}"; do
+            [ -d "${_common}/${_pname}/files" ] && \
+                _proton_candidates+=("${_common}/${_pname}/files")
+        done
+        # Then any other Proton directories we haven't caught
+        for _pdir in "${_common}"/Proton*/files; do
+            [ -d "$_pdir" ] || continue
+            # Skip if already in the list
+            _dup=false
+            for _existing in "${_proton_candidates[@]}"; do
+                [ "$_existing" = "$_pdir" ] && { _dup=true; break; }
+            done
+            [ "$_dup" = "true" ] || _proton_candidates+=("$_pdir")
+        done
+    done
 
     _proton_src=""
     for _candidate in "${_proton_candidates[@]}"; do
@@ -156,10 +233,43 @@ else
     done
 
     if [ -z "${_proton_src}" ]; then
-        warn "Could not find Proton Experimental — lsteamclient NOT bootstrapped."
-        warn "Steam API games may hang at startup.  Install 'Proton - Experimental'"
-        warn "via Steam to fix this automatically on the next package build."
-    else
+        warn "No local Proton install found — downloading Steam components from GitHub..."
+        msg2 "Searched ${#_proton_candidates[@]} candidate(s) across ${#_steam_roots[@]} Steam root(s)"
+
+        # Download Proton from Kron4ek's proton-archive (reliable, all versions)
+        _dl_tmp="$(mktemp -d)"
+        _dl_ok=false
+        if command -v curl >/dev/null 2>&1; then
+            # Preferred: proton-10.0-4 (matches our Wine 11.x base)
+            # Fallback through recent versions
+            for _ptag in "10.0/proton-10.0-4" "10.0/proton-10.0-3" "9.0/proton-9.0-4" "8.0/proton-8.0-5"; do
+                _dl_url="https://github.com/Kron4ek/proton-archive/releases/download/${_ptag}.tar.xz"
+                msg2 "Downloading: ${_ptag##*/}.tar.xz ..."
+                if curl -#fL "${_dl_url}" | xz -d | tar x -C "${_dl_tmp}" --strip-components=1 2>/dev/null; then
+                    if [ -d "${_dl_tmp}/files" ]; then
+                        _proton_src="${_dl_tmp}/files"
+                        _dl_ok=true
+                        ok "Downloaded ${_ptag##*/} from Kron4ek/proton-archive"
+                        break
+                    fi
+                else
+                    msg2 "${_ptag##*/} not available, trying next..."
+                fi
+            done
+        fi
+
+        if [ "$_dl_ok" = "false" ]; then
+            warn "Download failed — Steam components NOT bootstrapped."
+            warn "Steam API games may hang at startup."
+            warn "Install 'Proton Hotfix' or 'Proton - Experimental' via Steam,"
+            warn "or check your internet connection and re-run --reinstall-components."
+            rm -rf "${_dl_tmp}"
+        else
+            ok "Downloaded Proton components from GitHub"
+        fi
+    fi
+
+    if [ -n "${_proton_src:-}" ]; then
         msg2 "Found Proton source: ${_proton_src}"
         _lsc_files=(
             "lib/wine/x86_64-windows/lsteamclient.dll"
@@ -182,6 +292,178 @@ else
         done
         ok "lsteamclient bootstrap complete (${_copied} file(s) copied)"
     fi
+fi
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Additional Steam component bootstrap
+#
+#  These components are also sourced from Proton and are needed for full
+#  Steam integration:
+#    steam_helper.exe   — Steam overlay helper / steamwebhelper bridge
+#    steam.exe          — Steam client stub expected by some games
+#    gameoverlayrenderer.so — in-game overlay (shift+tab)
+#
+#  We reuse _proton_src from the lsteamclient search above. If lsteamclient
+#  was already present (skipped search), we search now.
+# ══════════════════════════════════════════════════════════════════════════════
+sep "Checking for additional Steam components"
+
+# If we skipped the Proton search above (lsteamclient already present), find
+# a Proton source now for the other components.
+if [ -z "${_proton_src:-}" ]; then
+    # Re-run the same discovery logic — the variables may not exist if
+    # lsteamclient was already present and the search block was skipped.
+    if [ -z "${_proton_candidates+x}" ] || [ ${#_proton_candidates[@]} -eq 0 ]; then
+        _proton_candidates=()
+        _proton_names=("Proton - Experimental" "Proton Hotfix" "Proton 9.0" "Proton 8.0")
+        # Rebuild _steam_roots if needed
+        if [ -z "${_steam_roots+x}" ] || [ ${#_steam_roots[@]} -eq 0 ]; then
+            _real_home="${HOME}"
+            if [ "$(id -u)" = "0" ] && [ -n "${SUDO_USER:-}" ]; then
+                _real_home="$(getent passwd "$SUDO_USER" 2>/dev/null | cut -d: -f6 || echo "$HOME")"
+            fi
+            _steam_roots=()
+            for _h in "$HOME" "$_real_home"; do
+                for _vdf in "${_h}/.steam/steam/steamapps/libraryfolders.vdf" \
+                            "${_h}/.steam/debian-installation/steamapps/libraryfolders.vdf" \
+                            "${_h}/.local/share/Steam/steamapps/libraryfolders.vdf"; do
+                    if [ -f "$_vdf" ]; then
+                        while IFS= read -r _lpath; do
+                            [ -n "$_lpath" ] && _steam_roots+=("$_lpath")
+                        done < <(grep '"path"' "$_vdf" 2>/dev/null \
+                                 | sed 's/.*"path"[[:space:]]*"\([^"]*\)".*/\1/')
+                        break 2
+                    fi
+                done
+            done
+            if [ ${#_steam_roots[@]} -eq 0 ]; then
+                for _h in "$HOME" "$_real_home"; do
+                    _steam_roots+=("${_h}/.steam/steam" "${_h}/.steam/debian-installation" "${_h}/.local/share/Steam")
+                done
+            fi
+        fi
+        for _root in "${_steam_roots[@]}"; do
+            _common="${_root}/steamapps/common"
+            [ -d "$_common" ] || continue
+            for _pname in "${_proton_names[@]}"; do
+                [ -d "${_common}/${_pname}/files" ] && \
+                    _proton_candidates+=("${_common}/${_pname}/files")
+            done
+            for _pdir in "${_common}"/Proton*/files; do
+                [ -d "$_pdir" ] || continue
+                _dup=false
+                for _existing in "${_proton_candidates[@]}"; do
+                    [ "$_existing" = "$_pdir" ] && { _dup=true; break; }
+                done
+                [ "$_dup" = "true" ] || _proton_candidates+=("$_pdir")
+            done
+        done
+    fi
+    for _candidate in "${_proton_candidates[@]}"; do
+        if [ -d "${_candidate}/lib/wine/x86_64-windows" ]; then
+            _proton_src="${_candidate}"
+            break
+        fi
+    done
+fi
+
+if [ -z "${_proton_src:-}" ]; then
+    warn "No Proton source found — skipping additional Steam component bootstrap."
+else
+    msg2 "Using Proton source: ${_proton_src}"
+
+    # steam_helper.exe / steam.exe
+    _steam_helper_files=(
+        "lib/wine/x86_64-windows/steam_helper.exe"
+        "lib/wine/i386-windows/steam_helper.exe"
+        "lib/wine/x86_64-windows/steam.exe"
+        "lib/wine/i386-windows/steam.exe"
+    )
+    _sh_copied=0
+    for _f in "${_steam_helper_files[@]}"; do
+        _src="${_proton_src}/${_f}"
+        _dst="${_wine_lib_dir}/${_f#lib/wine/}"
+        if [ -f "${_src}" ]; then
+            mkdir -p "$(dirname "${_dst}")"
+            cp -f "${_src}" "${_dst}"
+            msg2 "Copied: ${_f}"
+            (( _sh_copied++ )) || true
+        fi
+    done
+    if [ $_sh_copied -gt 0 ]; then
+        ok "steam_helper/steam.exe bootstrap: ${_sh_copied} file(s)"
+    else
+        warn "steam_helper.exe not found in Proton source — some overlay features may not work"
+    fi
+
+    # gameoverlayrenderer
+    _overlay_files=(
+        "lib/wine/x86_64-unix/gameoverlayrenderer.so"
+        "lib/wine/i386-unix/gameoverlayrenderer.so"
+    )
+    _ov_copied=0
+    for _f in "${_overlay_files[@]}"; do
+        _src="${_proton_src}/${_f}"
+        _dst="${_wine_lib_dir}/${_f#lib/wine/}"
+        if [ -f "${_src}" ]; then
+            mkdir -p "$(dirname "${_dst}")"
+            cp -f "${_src}" "${_dst}"
+            msg2 "Copied: ${_f}"
+            (( _ov_copied++ )) || true
+        fi
+    done
+    if [ $_ov_copied -gt 0 ]; then
+        ok "gameoverlayrenderer bootstrap: ${_ov_copied} file(s)"
+    else
+        warn "gameoverlayrenderer.so not found in Proton source — in-game overlay may not work"
+    fi
+
+    # steamclient.dll (some Proton builds ship this separately)
+    _sc_files=(
+        "lib/wine/x86_64-windows/steamclient.dll"
+        "lib/wine/i386-windows/steamclient.dll"
+        "lib/wine/x86_64-windows/steamclient64.dll"
+        "lib/wine/i386-windows/steamclient64.dll"
+    )
+    _sc_copied=0
+    for _f in "${_sc_files[@]}"; do
+        _src="${_proton_src}/${_f}"
+        _dst="${_wine_lib_dir}/${_f#lib/wine/}"
+        if [ -f "${_src}" ]; then
+            mkdir -p "$(dirname "${_dst}")"
+            cp -f "${_src}" "${_dst}"
+            msg2 "Copied: ${_f}"
+            (( _sc_copied++ )) || true
+        fi
+    done
+    if [ $_sc_copied -gt 0 ]; then
+        ok "steamclient bootstrap: ${_sc_copied} file(s)"
+    else
+        msg2 "steamclient.dll not found in Proton source (may not be needed)"
+    fi
+fi
+
+# Clean up downloaded Proton temp dir if we created one
+[ -n "${_dl_tmp:-}" ] && [ -d "${_dl_tmp:-}" ] && rm -rf "${_dl_tmp}"
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Ship DXVK and VKD3D-Proton config files
+# ══════════════════════════════════════════════════════════════════════════════
+sep "Installing runtime configs"
+_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_files_dir="${NEUTRON_PACKAGE_DIR}/files"
+
+if [ -f "${_script_dir}/dxvk.conf" ]; then
+    cp -f "${_script_dir}/dxvk.conf" "${_files_dir}/dxvk.conf"
+    ok "dxvk.conf installed"
+else
+    msg2 "dxvk.conf not found alongside packager — skipping"
+fi
+if [ -f "${_script_dir}/vkd3d-proton.conf" ]; then
+    cp -f "${_script_dir}/vkd3d-proton.conf" "${_files_dir}/vkd3d-proton.conf"
+    ok "vkd3d-proton.conf installed"
+else
+    msg2 "vkd3d-proton.conf not found alongside packager — skipping"
 fi
 
 sep "Writing neutron launcher script"
@@ -379,6 +661,36 @@ env.setdefault("WINE_LARGE_ADDRESS_AWARE", "1")
 env.setdefault("WINEDEBUG",               "-all")  # suppress noise; override externally if needed
 env.setdefault("DXVK_LOG_LEVEL",          "none")  # suppress DXVK HUD spam by default
 
+# ── DXVK config file ─────────────────────────────────────────────────────────
+# Point DXVK at our shipped config unless the user has their own
+_dxvk_conf = os.path.join(FILES_DIR, "dxvk.conf")
+if os.path.isfile(_dxvk_conf):
+    env.setdefault("DXVK_CONFIG_FILE", _dxvk_conf)
+
+# ── DXVK async shader compilation ────────────────────────────────────────────
+env.setdefault("DXVK_ASYNC", "1")
+
+# ── Mesa / Vulkan driver hints ────────────────────────────────────────────────
+# RADV (AMD): enable shader pre-caching, NGG culling
+env.setdefault("RADV_PERFTEST", "gpl,nggc,sam")
+# ANV (Intel): nothing specific needed but keep defaults sane
+# NVIDIA: controlled by nvidia-settings / env; keep hands off unless user overrides
+
+# ── GameMode integration ──────────────────────────────────────────────────────
+# Auto-detect Feral GameMode and wrap the game process for CPU governor + nice
+_gamemode_available = shutil.which("gamemoderun") is not None
+_use_gamemode = os.environ.get("NEUTRON_GAMEMODE", "auto")
+if _use_gamemode == "auto":
+    _use_gamemode = "1" if _gamemode_available else "0"
+GAMEMODE_WRAP = _use_gamemode == "1" and _gamemode_available
+
+# ── MangoHud integration ─────────────────────────────────────────────────────
+# If MANGOHUD=1 is set by the user (e.g., via Steam launch options), we let it
+# through naturally. No auto-enable — user opt-in only.
+# We just ensure MANGOHUD_DLSYM is set for proper hooking.
+if env.get("MANGOHUD") == "1":
+    env.setdefault("MANGOHUD_DLSYM", "1")
+
 # Steam App ID forwarding
 if APP_ID:
     env.setdefault("SteamAppId",  APP_ID)
@@ -425,6 +737,9 @@ def verb_run(args, wait=True):
     # WoW64-configured prefix), otherwise fall back to wine.
     runner = WINE64_PATH if os.path.isfile(WINE64_PATH) else WINE_PATH
     cmd = [runner] + args
+    # Wrap with gamemoderun if available and enabled
+    if GAMEMODE_WRAP:
+        cmd = ["gamemoderun"] + cmd
     proc = subprocess.Popen(cmd, env=env)
     if wait:
         try:
