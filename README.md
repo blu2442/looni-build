@@ -169,7 +169,7 @@ tree with `bin/wine`, `lib/`, etc.
 ### 🎮 neutron-builder — looni-neutron_builder
 
 Builds a complete **Neutron package** (a Steam-compatible Proton tool) from source: a Wine build
-(proton-wine or kron4ek-tkg) compiled with MinGW PE support, plus DXVK and
+(proton-wine, GE-Proton, or kron4ek-tkg) compiled with MinGW PE support, plus DXVK and
 VKD3D-Proton, all assembled into a Steam-loadable package. The result drops into
 `compatibilitytools.d/` and appears in Steam's per-game Compatibility dropdown —
 just like GE-Proton, but built locally from the sources you choose with the
@@ -196,6 +196,9 @@ neutron-builder --list                           # show installed Neutron builds
 
 | Key | Source | Notes |
 |-----|--------|-------|
+| `mainline` | WineHQ mainline | Official stable releases (version picker) |
+| `experimental` | WineHQ experimental | Bleeding-edge master branch |
+| `staging` | Wine-Staging | Mainline + community patches (version picker) |
 | `proton-wine` | Valve proton-wine | Stable branches with interactive version picker |
 | `proton-wine-experimental` | Valve proton-wine experimental | Bleeding-edge, no picker |
 | `ge-proton` | GE-Proton (GloriousEggroll) | proton-wine + GE's full gaming patch set (version picker) |
