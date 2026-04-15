@@ -8,9 +8,9 @@
 # Can also be invoked standalone if the required environment vars are set.
 #
 # Required env vars:
-#   NEUTRON_PACKAGE_DIR  — root of the Proton package being assembled
+#   NEUTRON_PACKAGE_DIR  — root of the Neutron package being assembled
 #   WINE_INSTALL_PREFIX  — where Wine was installed (= NEUTRON_PACKAGE_DIR/files)
-#   BUILD_NAME           — human-readable name for this Proton build
+#   BUILD_NAME           — human-readable name for this Neutron build
 #
 # Optional env vars (neutron-builder.sh sets all of these):
 #   DXVK_SOURCE_KEY      — dxvk | dxvk-async | none   (used for display only)
@@ -62,7 +62,7 @@ msg2 "Wine version : ${_wine_ver}"
 # ══════════════════════════════════════════════════════════════════════════════
 #  Write compatibilitytool.vdf
 #
-#  Steam reads this file to discover and display the custom Proton in the
+#  Steam reads this file to discover and display the custom Neutron in the
 #  game's compatibility settings dropdown.
 # ══════════════════════════════════════════════════════════════════════════════
 sep "Writing compatibilitytool.vdf"
@@ -86,7 +86,7 @@ ok "compatibilitytool.vdf written"
 # ══════════════════════════════════════════════════════════════════════════════
 #  Write toolmanifest.vdf
 #
-#  Tells Steam how to invoke this Proton build.
+#  Tells Steam how to invoke this Neutron build.
 #  The %verb% token is replaced by Steam at runtime with the action to perform
 #  (run, waitforexitandrun, runinprefix, etc.).
 #
@@ -546,6 +546,9 @@ env["WINE"]       = WINE_PATH
 env["WINE64"]     = WINE64_PATH
 env["WINESERVER"] = SERVER_PATH
 env["WINEBOOT"]   = BOOT_PATH
+# WINELOADER is critical — Wine re-execs itself through this path for WoW64
+# (32-bit processes inside a 64-bit prefix). Without it, games silently exit 0.
+env["WINELOADER"] = WINE64_PATH if os.path.isfile(WINE64_PATH) else WINE_PATH
 
 # ── Wine prefix ───────────────────────────────────────────────────────────────
 if WINE_PREFIX:
@@ -575,6 +578,13 @@ env["LD_LIBRARY_PATH"] = ":".join(p for p in ld_parts + [existing_ld] if p)
 # This is what makes DXVK and VKD3D-Proton actually get loaded.
 # Wine searches these directories for .dll files before its own builtins.
 dll_paths = []
+# Standard Wine PE DLL directories — Wine needs these to find its own built-in DLLs
+_wine_pe_64 = os.path.join(LIB_DIR, "wine", "x86_64-windows")
+_wine_pe_32 = os.path.join(LIB_DIR, "wine", "i386-windows")
+for _d in [_wine_pe_64, _wine_pe_32]:
+    if os.path.isdir(_d):
+        dll_paths.append(_d)
+# DXVK / VKD3D override directories
 for d in [DXVK_DIR_64, VKD3D_DIR_64, DXVK_DIR_32, VKD3D_DIR_32]:
     if os.path.isdir(d):
         dll_paths.append(d)
@@ -732,11 +742,26 @@ def init_prefix():
 def verb_run(args, wait=True):
     """Run a Windows executable through Wine."""
     init_prefix()
-    # Steam passes the full Windows path to the executable as args.
-    # Use wine64 if available (it handles both 32 and 64-bit exes on a
-    # WoW64-configured prefix), otherwise fall back to wine.
     runner = WINE64_PATH if os.path.isfile(WINE64_PATH) else WINE_PATH
-    cmd = [runner] + args
+
+    # Use "start /wait" mode for games with a launcher exe that spawns the
+    # real game as a child process (e.g. Skyrim's SkyrimSELauncher.exe).
+    # Without this, Wine exits as soon as the launcher quits, orphaning the game.
+    # Auto-detect: if NEUTRON_START_WAIT=1 or the exe name contains "launcher",
+    # use start /wait. Can also be forced via env var.
+    use_start_wait = os.environ.get("NEUTRON_START_WAIT", "auto")
+    exe_name = os.path.basename(args[0]).lower() if args else ""
+    if use_start_wait == "auto":
+        use_start_wait = "launcher" in exe_name
+    else:
+        use_start_wait = use_start_wait == "1"
+
+    if use_start_wait:
+        print(f"neutron: using start /wait mode (launcher detected: {exe_name})", file=sys.stderr)
+        cmd = [runner, "start", "/wait", "/unix"] + args
+    else:
+        cmd = [runner] + args
+
     # Wrap with gamemoderun if available and enabled
     if GAMEMODE_WRAP:
         cmd = ["gamemoderun"] + cmd
@@ -746,6 +771,12 @@ def verb_run(args, wait=True):
             proc.wait()
         except KeyboardInterrupt:
             proc.terminate()
+        # After the main process exits, wait for wineserver to finish —
+        # catches child processes that outlive their parent (common pattern)
+        try:
+            subprocess.run([SERVER_PATH, "-w"], env=env, timeout=30)
+        except (subprocess.TimeoutExpired, Exception):
+            pass
         sys.exit(proc.returncode)
     sys.exit(0)
 
@@ -861,6 +892,6 @@ _pkg_size="$(du -sh "$NEUTRON_PACKAGE_DIR" 2>/dev/null | cut -f1)"
 ok "Package size: ${_pkg_size}"
 
 sep "Packaging complete"
-ok "Proton package ready at: ${NEUTRON_PACKAGE_DIR}"
+ok "Neutron package ready at: ${NEUTRON_PACKAGE_DIR}"
 msg2 "To install:  cp -r ${NEUTRON_PACKAGE_DIR} ~/.steam/steam/compatibilitytools.d/"
 msg2 "Then restart Steam and enable in game Properties → Compatibility."

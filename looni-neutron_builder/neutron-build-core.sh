@@ -85,36 +85,30 @@ mkdir -p "${BUILD_RUN_DIR}"
 # ══════════════════════════════════════════════════════════════════════════════
 #  HUD state  (shared across _draw_bar calls)
 # ══════════════════════════════════════════════════════════════════════════════
-_HUD_DRAWN=0
 _HUD_WARNINGS=0
 _HUD_ERRORS=0
-_HUD_LAST_FILES=""
-_HUD_JOBS=0
+_HUD_LAST_FILE=""
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  _draw_bar <cur> <tot> <label> <start_epoch> <eta_secs>
 #
-#  4-line HUD drawn to /dev/tty — updates in-place via cursor movement:
-#    Line 1: progress bar + pct + count
-#    Line 2: elapsed / ETA / speed
-#    Line 3: last 3 filenames being compiled
-#    Line 4: live warning / error badge + job count
+#  Single-line progress bar — updates in-place via \r.
+#  Shows: [bar] pct  (count)  elapsed  ETA  file
 # ══════════════════════════════════════════════════════════════════════════════
 _draw_bar() {
     local cur="$1" tot="$2" label="$3" start="${4:-0}" eta="${5:-0}"
 
     # ── Bar ──────────────────────────────────────────────────────────────
-    local width=50 filled pct bar="" i=0
+    local width=30 filled pct bar="" i=0
     if [ "$tot" -eq 0 ]; then
-        # Indeterminate mode: bouncing 8-wide pulse block, driven by elapsed time
         local now_s; now_s=$(date +%s)
         local tick=$(( (now_s - start) % 10 ))
-        local pos=$(( tick * 5 ))
-        [ "$pos" -gt $(( width - 8 )) ] && pos=$(( width * 2 - 8 - pos ))
+        local pos=$(( tick * 3 ))
+        [ "$pos" -gt $(( width - 6 )) ] && pos=$(( width * 2 - 6 - pos ))
         while [ "$i" -lt "$pos" ];            do bar="${bar}░"; i=$(( i+1 )); done
-        while [ "$i" -lt $(( pos + 8 )) ];    do bar="${bar}█"; i=$(( i+1 )); done
+        while [ "$i" -lt $(( pos + 6 )) ];    do bar="${bar}█"; i=$(( i+1 )); done
         while [ "$i" -lt "$width" ];          do bar="${bar}░"; i=$(( i+1 )); done
-        pct=0
+        pct="??"
     else
         filled=$(( cur * width / tot ))
         pct=$(( cur * 100 / tot ))
@@ -127,60 +121,35 @@ _draw_bar() {
     if [ "$start" -gt 0 ]; then
         local now; now=$(date +%s)
         elapsed=$(( now - start ))
-        if   [ "$elapsed" -ge 3600 ]; then elapsed_str="$(( elapsed/3600 ))h$(( (elapsed%3600)/60 ))m$(( elapsed%60 ))s"
+        if   [ "$elapsed" -ge 3600 ]; then elapsed_str="$(( elapsed/3600 ))h$(( (elapsed%3600)/60 ))m"
         elif [ "$elapsed" -ge 60   ]; then elapsed_str="$(( elapsed/60 ))m$(( elapsed%60 ))s"
         else                               elapsed_str="${elapsed}s"; fi
     fi
 
-    # ── ETA (EWMA cross-checked with wall-clock) ──────────────────────────
+    # ── ETA ──────────────────────────────────────────────────────────────
     local eta_str="--"
     if [ "$cur" -gt 0 ] && [ "$eta" -gt 2 ]; then
         local wc_eta=0
         [ "$elapsed" -gt 0 ] && wc_eta=$(( elapsed * ( tot - cur ) / cur ))
         local best_eta; best_eta=$(( eta > wc_eta ? eta : wc_eta ))
-        if   [ "$best_eta" -ge 3600 ]; then eta_str="$(( best_eta/3600 ))h$(( (best_eta%3600)/60 ))m$(( best_eta%60 ))s"
-        elif [ "$best_eta" -ge 60   ]; then eta_str="$(( best_eta/60 ))m$(( best_eta%60 ))s"
-        else                                eta_str="${best_eta}s"; fi
+        if   [ "$best_eta" -ge 3600 ]; then eta_str="~$(( best_eta/3600 ))h$(( (best_eta%3600)/60 ))m"
+        elif [ "$best_eta" -ge 60   ]; then eta_str="~$(( best_eta/60 ))m$(( best_eta%60 ))s"
+        else                                eta_str="~${best_eta}s"; fi
     fi
 
-    # ── Speed (steps/min) ─────────────────────────────────────────────────
-    local speed_str="--"
-    if [ "$elapsed" -gt 0 ] && [ "$cur" -gt 0 ]; then
-        local spm=$(( cur * 60 / elapsed ))
-        speed_str="${spm} files/min"
-    fi
+    # ── Warn/error suffix ────────────────────────────────────────────────
+    local issues=""
+    [ "$_HUD_ERRORS"   -gt 0 ] && issues=" ${_RED}${_HUD_ERRORS}err${_R}"
+    [ "$_HUD_WARNINGS" -gt 0 ] && issues="${issues} ${_YLW}${_HUD_WARNINGS}warn${_R}"
 
-    # ── Recent files (last 3) ─────────────────────────────────────────────
-    local recent_str=""
-    for _f in $_HUD_LAST_FILES; do
-        [ -n "$recent_str" ] && recent_str="${recent_str}  ${_DIM}›${_R}  "
-        recent_str="${recent_str}${_DIM}${_f}${_R}"
-    done
-    [ -z "$recent_str" ] && recent_str="${_DIM}waiting...${_R}"
+    # ── Truncate filename to fit ─────────────────────────────────────────
+    local fname="$_HUD_LAST_FILE"
+    [ "${#fname}" -gt 20 ] && fname="…${fname: -19}"
 
-    # ── Warn/error badge ──────────────────────────────────────────────────
-    local warn_badge="" err_badge=""
-    [ "$_HUD_WARNINGS" -gt 0 ] && warn_badge="${_YLW}⚠  ${_HUD_WARNINGS} warn${_R}  "
-    [ "$_HUD_ERRORS"   -gt 0 ] && err_badge="${_RED}✖  ${_HUD_ERRORS} err${_R}  "
-    local badge_str="${warn_badge}${err_badge}"
-    [ -z "$badge_str" ] && badge_str="${_DIM}no issues${_R}"
-
-    # ── Draw to /dev/tty ──────────────────────────────────────────────────
+    # ── Single-line draw ─────────────────────────────────────────────────
     {
-        [ "${_HUD_DRAWN:-0}" -eq 1 ] && printf "\033[4A"
-        _HUD_DRAWN=1
-        if [ "$tot" -eq 0 ]; then
-            printf "\033[K${_MAG}  [%s] ??%%${_R}  ${_DIM}(%d compiled — calculating total...)${_R}\n" \
-                "$bar" "$cur"
-        else
-            printf "\033[K${_MAG}  [%s] %3d%%${_R}  ${_DIM}(%d / %d)${_R}\n" \
-                "$bar" "$pct" "$cur" "$tot"
-        fi
-        printf "\033[K  ${_CYN}elapsed${_R} %-10s  ${_CYN}ETA${_R} %-12s  ${_CYN}compile speed${_R} %s\n" \
-            "$elapsed_str" "$eta_str" "$speed_str"
-        printf "\033[K  ${_CYN}compiling${_R}  %s\n" "$recent_str"
-        printf "\033[K  ${_CYN}status${_R}  %s  ${_DIM}jobs=${_HUD_JOBS}${_R}\n" \
-            "$badge_str"
+        printf "\r\033[K  ${_MAG}[%s]${_R} %3s%%  ${_DIM}%d/%d${_R}  ${_CYN}%s${_R}  ${_CYN}%s${_R}  ${_DIM}%s${_R}%s" \
+            "$bar" "$pct" "$cur" "$tot" "$elapsed_str" "$eta_str" "$fname" "$issues"
     } > /dev/tty
 }
 
@@ -230,22 +199,14 @@ _make_compile_bar() {
     local _tmp_out _make_exit _label="starting"
     _tmp_out=$(mktemp)
     _start=$(date +%s); _prev="$_start"
-    _HUD_DRAWN=0
     _HUD_WARNINGS=0
     _HUD_ERRORS=0
-    _HUD_LAST_FILES=""
-    _HUD_JOBS="$JOBS"
+    _HUD_LAST_FILE=""
 
     # ── Let the user know the bar will be quiet for a while ──────────────
-    # Wine builds its own host tools (winebuild, wrc, widl, makedep …) before
-    # compiling any .c files.  The counter won't move during this phase since
-    # those steps don't produce -c/-o style output we can count.
     printf "\n" > /dev/tty
-    printf "  ${_CYN}${_B}Heads up:${_R} compilation takes a few minutes to start.\n" > /dev/tty
-    printf "  Wine bootstraps its build tools first — the bar will sit at 0%%\n" > /dev/tty
-    printf "  until that finishes.  Everything is working, please wait... :3\n" > /dev/tty
-    printf "\n\n\n\n" > /dev/tty
-    _draw_bar 0 "$_total" "bootstrapping build tools..." "$_start" 0
+    printf "  ${_CYN}${_B}Heads up:${_R} Wine bootstraps build tools first — bar starts at 0%%. Please wait :3\n" > /dev/tty
+    _draw_bar 0 "$_total" "bootstrapping..." "$_start" 0
 
     # ── Run make in background, poll output in 0.1 s batches ─────────────
     # --output-sync=none: stream each line immediately instead of buffering
@@ -262,7 +223,6 @@ _make_compile_bar() {
             printf '%s\n' "$_line" >> "$BUILD_LOG"
 
             if [[ "$_line" =~ error:|fatal\ error:|make.*Error|make.*Stop ]]; then
-                { printf "\033[4B"; printf "%s\n" "$_line"; printf "\033[4A"; } > /dev/tty
                 _HUD_ERRORS=$(( _HUD_ERRORS + 1 ))
             fi
             [[ "$_line" =~ warning: ]] && _HUD_WARNINGS=$(( _HUD_WARNINGS + 1 ))
@@ -279,22 +239,11 @@ _make_compile_bar() {
                 fi
                 local _rem=$(( _total - _cur ))
                 _eta=$(( _ewma_x100 * _rem / 100 ))
-                # Extract source filename using bash regex — no subshell
                 local _file=""
                 if [[ "$_line" =~ [^\ ]+\.(c|cpp|s) ]]; then
                     _file="${BASH_REMATCH[0]}"
                 fi
-                local _basename="${_file##*/}"
-                # Bootstrap detection: tool sources live under tools/
-                if [[ "$_file" =~ ^tools/|/tools/ ]]; then
-                    _label="bootstrapping: ${_basename}"
-                else
-                    _label="$_basename"
-                    local _f1 _f2
-                    _f1="${_HUD_LAST_FILES%% *}"
-                    _f2="${_HUD_LAST_FILES#* }"; _f2="${_f2%% *}"
-                    _HUD_LAST_FILES="${_label} ${_f1} ${_f2}"
-                fi
+                _HUD_LAST_FILE="${_file##*/}"
             fi
         done < "$_tmp_out"
 
@@ -307,23 +256,20 @@ _make_compile_bar() {
 
     while IFS= read -r _line; do
         printf '%s\n' "$_line" >> "$BUILD_LOG"
-        if [[ "$_line" =~ error:|fatal\ error:|make.*Error ]]; then
-            { printf "\r\033[K"; printf "%s\n" "$_line"; } > /dev/tty
-        fi
     done < "$_tmp_out"
     rm -f "$_tmp_out"
     set -e
 
     if [ "$_make_exit" -ne 0 ]; then
-        printf "\n" > /dev/tty
-        printf "${_RED}Make failed (exit %d) — last output:${_R}\n" "$_make_exit" >&2
+        printf "\n\n" > /dev/tty
+        printf "  ${_RED}Make failed (exit %d) — last output:${_R}\n" "$_make_exit" >&2
         tail -20 "$BUILD_LOG" >&2
         return "$_make_exit"
     fi
 
     [ "$_total" -lt "$_cur" ] && _total="$_cur"
-    _HUD_LAST_FILES="done"
-    _draw_bar "$_total" "$_total" "complete ✓" "$_start" 0
+    _HUD_LAST_FILE="done ✓"
+    _draw_bar "$_total" "$_total" "complete" "$_start" 0
     printf "\n" > /dev/tty
 }
 

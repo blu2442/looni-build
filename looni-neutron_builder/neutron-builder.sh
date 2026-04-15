@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # ╔═════════════════════════════════════════════════════════════════════════════╗
-# ║            looni-neutron_builder  •  multi-component  v1.0.0               ║
+# ║            looni-neutron_builder  •  multi-component  v1.4.0               ║
 # ║   WineHQ  •  proton-wine  •  DXVK  •  VKD3D-Proton  •  Steam package      ║
 # ╚═════════════════════════════════════════════════════════════════════════════╝
 #
-# Entry point for building a custom Proton compatibility tool for Steam.
+# Entry point for building a custom Neutron compatibility tool for Steam.
 #
 # Phase 1 (this release):
 #   • proton-wine  — Valve's Wine fork, compiled with --with-mingw + Proton flags
-#   • Packaging    — Steam-loadable Proton layout (compatibilitytool.vdf etc.)
+#   • Packaging    — Steam-loadable Neutron layout (compatibilitytool.vdf etc.)
 #
 # Components:
 #   • DXVK        — D3D9/10/11 → Vulkan (neutron-dxvk-build.sh)
@@ -108,7 +108,7 @@ WOLF
     printf "\n"
     printf "  ╔═══════════════════════════════════════════════════════════════╗\n"
     printf "  ║                                                               ║\n"
-    printf "  ║  🎮  looni-neutron_builder  •  multi-component v1.0.0         ║\n"
+    printf "  ║  🎮  looni-neutron_builder  •  multi-component v1.4.0         ║\n"
     printf "  ║      proton-wine  •  DXVK  •  VKD3D-Proton  •  package        ║\n"
     printf "  ║                                                               ║\n"
     printf "  ╚═══════════════════════════════════════════════════════════════╝\n"
@@ -289,7 +289,7 @@ ${C_B}Build options:${C_R}
   --sniper              Enable Steam Runtime Sniper mode (container isolation)
 
 ${C_B}General:${C_R}
-  --list                Show all installed Proton builds
+  --list                Show all installed Neutron builds
   --dry-run             Print planned actions without executing them
   -h | --help           Show this help
 
@@ -316,7 +316,7 @@ ${C_B}Steam installation:${C_R}
     buildz/install/<build-name>/
   into:
     ~/.steam/steam/compatibilitytools.d/
-  Then restart Steam and enable your custom Proton in the game's
+  Then restart Steam and enable your custom Neutron in the game's
   Compatibility settings (Properties → Compatibility).
 USAGE
 }
@@ -373,7 +373,7 @@ done
 #  List mode
 # ══════════════════════════════════════════════════════════════════════════════
 if [ "${_LIST_MODE:-false}" = "true" ]; then
-    section "Installed Proton builds"
+    section "Installed Neutron builds"
     install_dir="${DEST_ROOT}/install"
     if [ ! -d "$install_dir" ] || [ -z "$(ls -A "$install_dir" 2>/dev/null)" ]; then
         msg2 "No builds found in ${install_dir}"
@@ -446,7 +446,7 @@ check_deps() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Disk space preflight  (warn at < 15 GB free — Proton needs more than Wine)
+#  Disk space preflight  (warn at < 15 GB free — Neutron needs more than Wine)
 # ══════════════════════════════════════════════════════════════════════════════
 check_disk_space() {
     local dir="$1"
@@ -1025,7 +1025,7 @@ fix_opencl_headers() {
 #  against a Kron4ek wine build (which lacks several Valve-only APIs) and
 #  runs the build inside the umu-sdk container.
 #
-#  Encodes every fix discovered during the looni Proton 11 build session:
+#  Encodes every fix discovered during the looni Neutron 11 build session:
 #    1. Wine binary stubs  (wine64 / preloaders missing in unified builds)
 #    2. Valve makedep      (Kron4ek makedep segfaults on Valve source syntax)
 #    3. wine_unix_to_nt_file_name stub  (lsteamclient/vrclient)
@@ -1327,13 +1327,13 @@ print('  install-sh written')
 #  _kron4ek_tkg_install_redist_to_proton  <BUILD_DIR> <PROTON_PKG_DIR>
 #
 #  Copies the redist output (lsteamclient, vrclient, steamexe) from the
-#  proton-tkg build tree into the assembled Proton package.
+#  proton-tkg build tree into the assembled Neutron package.
 # ══════════════════════════════════════════════════════════════════════════════
 _kron4ek_tkg_install_redist_to_proton() {
     local BUILD="$1"
     local PKG="$2"
 
-    section "Installing TKG redist into Proton package"
+    section "Installing TKG redist into Neutron package"
 
     local WINE_LIB="$PKG/files/lib/wine"
     mkdir -p \
@@ -1374,7 +1374,7 @@ _kron4ek_tkg_install_redist_to_proton() {
            "$WINE_LIB/x86_64-windows/vrclient_x64.dll" && \
         ok "  vrclient.dll → vrclient_x64.dll"
 
-    ok "Redist DLLs installed into Proton package"
+    ok "Redist DLLs installed into Neutron package"
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1580,7 +1580,7 @@ print_summary() {
     section "Build Summary"
     ok "Build complete in ${elapsed_fmt}"
     printf "\n"
-    printf "  ${C_B}Proton name  :${C_R} %s\n" "$(basename "$install_prefix")"
+    printf "  ${C_B}Neutron name :${C_R} %s\n" "$(basename "$install_prefix")"
     printf "  ${C_B}Install path :${C_R} %s\n" "$install_prefix"
 
     local wine_bin="${install_prefix}/files/bin/wine"
@@ -1692,7 +1692,7 @@ pick_build_name() {
     [ -z "$BUILD_NAME" ] || return 0
 
     section "Tool name"
-    printf "  Enter a base name for this Proton build.\n"
+    printf "  Enter a base name for this Neutron build.\n"
     printf "  The Wine version number will be appended automatically.\n"
     printf "  ${C_DIM}Example: looni-neutron  →  looni-neutron-11.4.r0.gabcdef${C_R}\n\n"
     printf "  ${C_B}Base name${C_R} [default: looni-neutron]: "
@@ -1931,14 +1931,14 @@ if [ -z "$BUILD_NAME" ]; then
 fi
 WINE_SOURCE_DIR="${SRC_ROOT}/${WINE_SOURCE_KEY}"
 BUILD_RUN_DIR="${DEST_ROOT}/build-run/${BUILD_NAME}"
-# Proton's Wine installs to <package>/files/ — not the package root
+# Neutron's Wine installs to <package>/files/ — not the package root
 NEUTRON_PACKAGE_DIR="${DEST_ROOT}/install/${BUILD_NAME}"
 WINE_INSTALL_PREFIX="${NEUTRON_PACKAGE_DIR}/files"
 BUILD_LOG="${BUILD_RUN_DIR}/build.log"
 
 msg2 "Wine source dir  : ${WINE_SOURCE_DIR}"
 msg2 "Build run dir    : ${BUILD_RUN_DIR}"
-msg2 "Proton package   : ${NEUTRON_PACKAGE_DIR}"
+msg2 "Neutron package  : ${NEUTRON_PACKAGE_DIR}"
 msg2 "Wine prefix      : ${WINE_INSTALL_PREFIX}"
 
 mkdir -p "$DEST_ROOT" "$SRC_ROOT" "$BUILD_RUN_DIR" "$WINE_INSTALL_PREFIX"
@@ -2529,9 +2529,9 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PACKAGE  — generate Steam Proton layout
+#  PACKAGE  — generate Steam Neutron layout
 # ══════════════════════════════════════════════════════════════════════════════
-section "Packaging Proton"
+section "Packaging Neutron"
 export NEUTRON_PACKAGE_DIR WINE_INSTALL_PREFIX
 export DXVK_SOURCE_KEY VKD3D_SOURCE_KEY
 export BUILD_NAME SNIPER_MODE
