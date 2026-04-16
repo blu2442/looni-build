@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ╔═════════════════════════════════════════════════════════════════════════════╗
-# ║                    looni-build  •  main launcher  v1.4.0                   ║
+# ║                    looni-build  •  main launcher  v1.5.0                   ║
 # ║           Wine  •  Neutron  •  Proton  •  Hybrid  •  Toolz            ║
 # ╚═════════════════════════════════════════════════════════════════════════════╝
 set -euo pipefail
@@ -80,7 +80,7 @@ WOLF
 printf "\n"
 printf "  ╔═════════════════════════════════════════════════════════════════╗\n"
 printf "  ║                                                                 ║\n"
-printf "  ║  :3 looni-build  •  Wine, Neutron & Proton toolkit  v1.4.0      ║\n"
+printf "  ║  :3 looni-build  •  Wine, Neutron & Proton toolkit  v1.5.0      ║\n"
 printf "  ║                                                                 ║\n"
 printf "  ╚═════════════════════════════════════════════════════════════════╝\n"
 printf "${C_R}\n"
@@ -218,7 +218,7 @@ WOLF
     printf "\n"
     printf "  ╔═════════════════════════════════════════════════════════════════╗\n"
     printf "  ║                                                                 ║\n"
-    printf "  ║  :3 looni-build  •  Wine, Neutron & Proton toolkit  v1.4.0      ║\n"
+    printf "  ║  :3 looni-build  •  Wine, Neutron & Proton toolkit  v1.5.0      ║\n"
     printf "  ║                                                                 ║\n"
     printf "  ╚═════════════════════════════════════════════════════════════════╝\n"
     printf "${C_R}\n"

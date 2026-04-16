@@ -27,7 +27,7 @@ overrides through a zenity-based GUI. Or do it all from the CLI.
 ⠀⠀⠀⡟⡿⢿⡿⠀⠀⠀⠀⠀⠙⠀⠻⢯⢷⣼⠁⠁⠀⠀⠀⠀⠀⡄⡈⢆⠀
 ⠀⠀⠀⠀⡇⣿⡅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠦⠀⠀⠀⠀⠀⠀⡇⢹⢿⡀
 ⠀⠀⠀⠀⠁⠛⠓⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠼⠇⠁
-                looni-build v1.4.0
+                looni-build v1.5.0
 ```
 
 ---
@@ -43,6 +43,7 @@ overrides through a zenity-based GUI. Or do it all from the CLI.
   - [neutron-install](#-neutron-install--looni-neutron-install)
   - [proton-install](#-proton-install--looni-proton-install)
   - [wine-proton_hybrid](#-wine-proton_hybrid--looni-wine-proton_hybrid_builder)
+  - [wine-neutron_hybrid](#-wine-neutron_hybrid--looni-wine-neutron_hybrid_builder)
   - [wine_toolz](#-wine_toolz--looni-winetoolz)
   - [Wine Install Manager](#-wine-install-manager)
 - [Project Layout](#project-layout)
@@ -68,7 +69,8 @@ proton-builder          # build GE-Proton or proton-tkg (delegated)
 proton-install          # download / deploy Proton packages
 neutron-install         # deploy locally-built Neutron packages
 wine_toolz              # open the GUI toolkit
-wine-proton_hybrid      # hybrid installer
+wine-proton_hybrid      # hybrid installer (Proton base)
+wine-neutron_hybrid     # hybrid installer (Neutron base)
 ```
 
 ---
@@ -87,7 +89,8 @@ Selective install:
 make install-neutron         # neutron_builder only
 make install-proton          # proton_builder only
 make install-wine            # wine_builder only
-make install-hybrid          # hybrid_builder only
+make install-hybrid          # wine-proton hybrid_builder only
+make install-neutron-hybrid  # wine-neutron hybrid_builder only
 make install-neutron-install # neutron-install only
 make install-toolz           # winetoolz only
 make install-launcher        # looni-build main menu only
@@ -204,7 +207,7 @@ neutron-builder --list                           # show installed Neutron builds
 | `ge-proton` | GE-Proton (GloriousEggroll) | proton-wine + GE's full gaming patch set (version picker) |
 | `kron4ek-tkg` | Kron4ek wine-tkg | Mainline + Staging + TKG patches + ntsync |
 
-#### GE Neutron (GloriousEggroll) — NEW in v1.4.0
+#### GE Neutron (GloriousEggroll)
 
 Select `ge-proton` as your source to build a **GE Neutron** — proton-wine with
 GloriousEggroll's full gaming patch set applied automatically. The version picker
@@ -378,7 +381,7 @@ manual setup step.
   `vrclient=disabled`) — prevents assertion crashes in games that have OpenVR
   bundled even when not using VR.
 
-#### Patch System (NEW in v1.3.0)
+#### Patch System
 
 neutron-builder includes a full patch system (`neutron-patcher.sh`) that applies
 patch groups to the Wine source between fetch and configure. For GE-Proton's
@@ -710,6 +713,52 @@ The hybrid installs a standalone launcher script. Control it with:
 
 ---
 
+### 🔀 wine-neutron_hybrid — looni-wine-neutron_hybrid_builder
+
+Merges any Wine build directly over an existing **Neutron** package base, producing a
+single hybrid tool that can be registered with Steam as a compatibility tool or used
+standalone via `./neutron run <game.exe>`. Same concept as wine-proton_hybrid but
+targeting Neutron packages instead of Proton installs.
+
+```bash
+wine-neutron_hybrid                          # interactive wizard
+wine-neutron_hybrid \
+    --wine-src ~/builds/wine-staging-10.5 \
+    --neutron-src ~/.steam/steam/compatibilitytools.d/looni-neutron-9.0 \
+    --name my-hybrid \
+    --install-mode steam
+wine-neutron_hybrid --uninstall --name my-hybrid
+```
+
+#### CLI Reference
+
+| Flag | Description |
+|------|-------------|
+| `--wine-src DIR` | Path to the custom Wine build directory |
+| `--neutron-src DIR` | Path to the Neutron package directory |
+| `--name NAME` | Tool name (default: `wine-neutron_looni`) |
+| `--protonfixes-dir DIR` | Path to protonfixes source (umu-protonfixes, etc.) |
+| `--install-mode MODE` | `steam` \| `steam-pick` \| `custom` |
+| `--install-dir DIR` | Parent directory for custom installs |
+| `--dry-run` | Show commands without executing |
+| `--verbose` | Print every command before running |
+| `--debug` | Dump Neutron lib/wine layout after install |
+| `--uninstall` | Remove a previously installed hybrid |
+
+#### Standalone Launcher Environment Variables
+
+The hybrid installs a standalone launcher script. Control it with:
+
+| Variable | Description |
+|----------|-------------|
+| `LOONI_PREFIX` | Exact prefix path (default: `~/.wine-neutron-pfx`) |
+| `WINE_USE_START` | Set to `1` for launcher-wrapped games (e.g., GTA IV) |
+| `PROTON_LOG` | Set to `1` for verbose Wine debug log in `/tmp/` |
+| `DXVK_HUD` | Set to `1` for DXVK overlay |
+| `WINEARCH` | `win64` (default) or `win32` |
+
+---
+
 ### 🛠️ wine_toolz — looni-winetoolz
 
 A zenity-based GUI for managing Wine prefixes, installing graphics layers, runtimes,
@@ -867,8 +916,11 @@ looni-build/
 │   └── proton-install.sh                       Proton downloader / deployer
 │
 ├── looni-wine-proton_hybrid_builder/
-│   ├── wine-proton_hybrid-v1.0.0.sh            Hybrid installer
+│   ├── wine-proton_hybrid-v1.0.0.sh            Hybrid installer (Proton base)
 │   └── buildz/                                 Build output (local mode)
+│
+├── looni-wine-neutron_hybrid_builder/
+│   └── wine-neutron_hybrid-v1.0.0.sh           Hybrid installer (Neutron base)
 │
 └── looni-winetoolz/
     ├── wine_toolz.sh                           Main launcher (zenity GUI)
@@ -915,7 +967,8 @@ explicitly `make install PREFIX=/usr/local`.
 │   ├── neutron-install         Neutron package deployer
 │   ├── proton-install          Proton downloader / deployer
 │   ├── wine_toolz              winetoolz GUI
-│   ├── wine-proton_hybrid      Hybrid installer
+│   ├── wine-proton_hybrid      Hybrid installer (Proton base)
+│   ├── wine-neutron_hybrid     Hybrid installer (Neutron base)
 │   └── wine_install_mgr        Wine Install Manager (standalone entry point)
 └── lib/
     ├── looni-neutron_builder/  Engine scripts + patches/
@@ -923,6 +976,7 @@ explicitly `make install PREFIX=/usr/local`.
     ├── looni-neutron-install/  neutron-install script
     ├── looni-proton-install/   proton-install script
     ├── looni-wine-proton_hybrid_builder/
+    ├── looni-wine-neutron_hybrid_builder/
     └── looni-winetoolz/        Modules + shared_lib/
 ```
 

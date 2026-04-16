@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ╔═════════════════════════════════════════════════════════════════════════════╗
-# ║            looni-neutron_builder  •  multi-component  v1.4.0               ║
+# ║            looni-neutron_builder  •  multi-component  v1.5.0               ║
 # ║   WineHQ  •  proton-wine  •  DXVK  •  VKD3D-Proton  •  Steam package      ║
 # ╚═════════════════════════════════════════════════════════════════════════════╝
 #
@@ -108,7 +108,7 @@ WOLF
     printf "\n"
     printf "  ╔═══════════════════════════════════════════════════════════════╗\n"
     printf "  ║                                                               ║\n"
-    printf "  ║  🎮  looni-neutron_builder  •  multi-component v1.4.0         ║\n"
+    printf "  ║  🎮  looni-neutron_builder  •  multi-component v1.5.0         ║\n"
     printf "  ║      proton-wine  •  DXVK  •  VKD3D-Proton  •  package        ║\n"
     printf "  ║                                                               ║\n"
     printf "  ╚═══════════════════════════════════════════════════════════════╝\n"
