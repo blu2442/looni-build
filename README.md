@@ -8,6 +8,10 @@ over existing Proton installs, manage installations with one-click switching, de
 builds and download pre-built releases, and handle prefixes, DXVK, runtimes, and DLL
 overrides through a zenity-based GUI. Or do it all from the CLI.
 
+Now with a **Python frontend** — a Textual TUI, Tkinter GUI, and Click CLI that wrap
+the battle-tested shell engines with modern keyboard navigation, live build progress,
+and a tool catalogue.
+
 ```
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⠁⠸⢳⡄⠀⠀⠀⠀⠀⠀⠀⠀
@@ -27,7 +31,7 @@ overrides through a zenity-based GUI. Or do it all from the CLI.
 ⠀⠀⠀⡟⡿⢿⡿⠀⠀⠀⠀⠀⠙⠀⠻⢯⢷⣼⠁⠁⠀⠀⠀⠀⠀⡄⡈⢆⠀
 ⠀⠀⠀⠀⡇⣿⡅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠦⠀⠀⠀⠀⠀⠀⡇⢹⢿⡀
 ⠀⠀⠀⠀⠁⠛⠓⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠼⠇⠁
-                looni-build v1.5.0
+                looni-build v1.0.0
 ```
 
 ---
@@ -36,6 +40,10 @@ overrides through a zenity-based GUI. Or do it all from the CLI.
 
 - [Quick Start](#quick-start)
 - [Install](#install)
+- [Python Frontend](#python-frontend)
+  - [TUI (Textual)](#tui-textual)
+  - [GUI (Tkinter)](#gui-tkinter)
+  - [CLI (Click)](#cli-click)
 - [Tools](#tools)
   - [wine-builder](#-wine-builder--looni-wine_builder)
   - [neutron-builder](#-neutron-builder--looni-neutron_builder)
@@ -73,6 +81,17 @@ wine-proton_hybrid      # hybrid installer (Proton base)
 wine-neutron_hybrid     # hybrid installer (Neutron base)
 ```
 
+### Python Quick Start
+
+```bash
+make py-dev             # editable install (pip install -e .[dev])
+looni                   # open the Textual TUI
+looni --gui             # open the Tkinter GUI
+looni launch wine_toolz # run a tool with full TTY handoff
+looni list              # print the tool catalogue
+looni doctor            # diagnose discovery + check what's found
+```
+
 ---
 
 ## Install
@@ -98,6 +117,131 @@ make install-launcher        # looni-build main menu only
 
 The installer adds a `PATH` block to `~/.bashrc` automatically. If `~/.local/bin`
 is already in your `PATH`, it's skipped. Run `source ~/.bashrc` after first install.
+
+### Python Frontend Install
+
+```bash
+make py-dev             # editable install — pip install -e .[dev]
+make py-test            # run the test suite (pytest)
+make py-tui             # open the Textual TUI launcher
+```
+
+Or install directly with pip:
+
+```bash
+pip install -e .        # minimal: textual + click
+pip install -e ".[dev]" # adds pytest, pytest-asyncio, textual-dev
+```
+
+After install, the `looni` console script is available:
+
+```bash
+looni                   # TUI launcher (default)
+looni --gui             # Tkinter GUI launcher
+looni launch <tool>     # run a tool with full TTY handoff
+looni build <tool>      # run a tool with live progress screen
+looni list              # print tool catalogue
+looni doctor            # diagnose tool discovery
+looni version           # print version
+```
+
+---
+
+## Python Frontend
+
+The `looni_build/` Python package provides three frontends over the shell build
+engines — a modern TUI, a graphical GUI, and a scriptable CLI. The shell scripts
+still do all the real work; Python handles the launcher UX, tool discovery,
+subprocess orchestration, and live build progress.
+
+### TUI (Textual)
+
+A full-featured terminal UI built with [Textual](https://github.com/Textualize/textual).
+Same wolf banner and tool list as the bash launcher, rendered with keyboard navigation,
+grouped categories, and a keybind footer.
+
+```bash
+looni                   # open the TUI
+make py-tui             # same thing via Makefile
+python -m looni_build   # same thing via Python module
+```
+
+**Keybindings:**
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Navigate the tool list |
+| `Enter` | Launch the highlighted tool (auto-picks best mode) |
+| `b` | Open in Build View — captured output with live progress bar |
+| `l` | Legacy launch — suspend TUI, hand TTY to the shell tool |
+| `r` | Refresh tool availability (useful after `make install`) |
+| `?` | Show keybinding help |
+| `q` / `Esc` | Quit |
+
+**Two launch modes:**
+
+- **Legacy (suspend)** — the TUI suspends and gives the shell tool a full TTY.
+  `fzf` pickers, `zenity` dialogs, and `read` prompts all work exactly like
+  running the script directly. This is the default for interactive tools.
+
+- **Build View** — the TUI stays up and streams the tool's stdout/stderr into a
+  live log pane with a progress bar, elapsed clock, and section headings parsed
+  from the shell output. Use this for long non-interactive builds where watching
+  progress without losing the UI is more valuable than interactive prompts.
+
+### GUI (Tkinter)
+
+A graphical launcher window using Python's built-in Tkinter. Tools are grouped by
+category with colored headers and hover effects. Clicking a tool opens it in your
+terminal emulator.
+
+```bash
+looni --gui                 # from the CLI
+python -m looni_build.gui   # direct module launch
+```
+
+**Supported terminal emulators** (auto-detected in order):
+xfce4-terminal, gnome-terminal, konsole, alacritty, kitty, xterm.
+
+The GUI shows each tool's resolved path and greys out tools that can't be found.
+A status bar at the bottom shows which terminal emulator was detected.
+
+### CLI (Click)
+
+A [Click](https://click.palletsprojects.com/)-based command-line interface for
+scripting and direct tool invocation without opening a TUI.
+
+```bash
+looni list                          # pretty-print the tool catalogue
+looni list --format=keys            # one key per line (for scripting)
+looni list --format=plain           # tab-separated key/path/blurb
+looni launch wine-builder           # full TTY handoff
+looni launch neutron-builder -- --source proton-wine --branch proton_9.0
+looni build neutron-builder -- --dry-run
+looni doctor                        # show repo root + tool resolution
+looni version                       # print version string
+```
+
+| Command | Description |
+|---------|-------------|
+| `looni` | Open the TUI launcher (default) |
+| `looni --gui` | Open the Tkinter GUI launcher |
+| `looni launch TOOL [ARGS...]` | Run a tool with full TTY handoff (fzf/zenity work) |
+| `looni build TOOL [ARGS...]` | Run a tool with live progress screen (non-interactive) |
+| `looni list` | Print the tool catalogue |
+| `looni doctor` | Diagnose discovery — repo root and resolved tool paths |
+| `looni version` | Print the version |
+
+**Tool discovery** works in three modes:
+
+1. **Installed with PATH** — `make install` put binaries in `~/.local/bin/` (or
+   your `PREFIX/bin/`). `shutil.which` finds them.
+2. **Source tree** — running from the repo checkout. Tools resolve via their
+   relative path from the repo root.
+3. **Installed without PATH** — probes `~/.local`, `/usr/local`, `/usr` for
+   `bin/` and `lib/` layouts.
+
+Set `$LOONI_ROOT` to explicitly point at a source checkout.
 
 ---
 
@@ -574,9 +718,9 @@ with `proton-install --deploy <path>` or the interactive `proton-install` menu.
 
 ### 🚀 neutron-install — looni-neutron-install
 
-**Rewritten in v1.3.0** as a full CLI package manager for Neutron builds. Installs,
-deploys to Steam, sets up as system Wine, switches active versions, and manages
-installed Neutron packages — all with fzf pickers and numbered fallbacks.
+A full CLI package manager for Neutron builds. Installs, deploys to Steam, sets up
+as system Wine, switches active versions, and manages installed Neutron packages —
+all with fzf pickers and numbered fallbacks.
 
 ```bash
 neutron-install                             # interactive menu (7 actions)
@@ -875,7 +1019,37 @@ Any directory containing `bin/wine` or `bin/wine64` is a valid source.
 looni-build/
 ├── looni-build.sh                              Main launcher menu (fzf or numbered)
 ├── Makefile                                    Install / uninstall
+├── pyproject.toml                              Python package config (hatchling)
 ├── README.md
+│
+├── looni_build/                                Python frontend package
+│   ├── __init__.py                             Package root + version
+│   ├── __main__.py                             python -m looni_build entry
+│   ├── cli.py                                  Click CLI (looni command)
+│   ├── core/
+│   │   ├── __init__.py                         Re-exports: TOOLS, find_tool, run_tool
+│   │   ├── tools.py                            Tool dataclass + catalogue (9 tools)
+│   │   ├── discovery.py                        find_tool() / resolve_root()
+│   │   └── runner.py                           Subprocess launcher with TTY handoff
+│   ├── tui/
+│   │   ├── __init__.py                         Re-exports LauncherApp
+│   │   ├── app.py                              Textual LauncherApp (banner, OptionList)
+│   │   ├── build_screen.py                     Live build progress screen
+│   │   ├── build_runner.py                     Async subprocess + output streaming
+│   │   └── progress.py                         Stage-marker parser (==> / ── / ✓)
+│   └── gui/
+│       ├── __init__.py                         Re-exports main
+│       ├── __main__.py                         python -m looni_build.gui entry
+│       └── app.py                              Tkinter GUI launcher
+│
+├── tests/
+│   ├── conftest.py                             Shared fixtures (fake tool trees)
+│   ├── test_tools.py                           Tool catalogue tests
+│   ├── test_discovery.py                       find_tool / resolve_root tests
+│   ├── test_cli.py                             Click CLI tests
+│   ├── test_tui.py                             Textual TUI tests
+│   ├── test_build_screen.py                    BuildScreen tests
+│   └── test_progress.py                        Progress parser tests
 │
 ├── looni-wine_builder/
 │   ├── wine-builder.sh                         Entry point (CLI + interactive)
@@ -885,7 +1059,9 @@ looni-build/
 │   ├── helper.sh                               Utility functions
 │   ├── install-from-build.sh                   Post-build installation
 │   ├── wine-tkg-patcher.sh                     TKG patch applicator
+│   ├── _output_common.sh                       Shared output helpers (msg/ok/err/sep)
 │   ├── customization.cfg                       Build config (compiler flags, configure args)
+│   ├── Containerfile                           Container build environment
 │   ├── patches/                                Drop .patch/.diff files here
 │   └── deps-tkg                                TKG dependency list
 │
@@ -897,10 +1073,12 @@ looni-build/
 │   ├── neutron-package.sh                      Steam package assembler (launcher, bootstrap,
 │   │                                           toolmanifest, dxvk.conf, Steam components)
 │   ├── neutron-patcher.sh                      Patch system engine (fzf multi-picker)
+│   ├── _output_common.sh                       → symlink to ../looni-wine_builder/
 │   ├── dxvk.conf                               Shipped DXVK config (async, state cache)
 │   ├── vkd3d-proton.conf                       Shipped VKD3D-Proton config reference
 │   ├── spinner.sh                              Progress animation
 │   ├── ntsync.h                                Kernel header for ntsync support
+│   ├── Containerfile.neutron                    Container build environment
 │   ├── neutron-customization.cfg               Build config
 │   ├── patches/                                User patch groups (add your own)
 │   │   └── custom/                             Empty template — drop .patch files here
@@ -1170,10 +1348,22 @@ sudo pacman -S podman              # Arch
 | Tool | Used by |
 |------|---------|
 | `rsync` | wine-proton_hybrid, Wine Install Manager |
-| `python3` | neutron launcher, wine-proton_hybrid |
+| `python3` | neutron launcher, wine-proton_hybrid, Python frontend |
 | `curl` | winetoolz, proton-install, proton-builder (GitHub release downloads) |
 | `tar`, `zstd` | winetoolz, proton-install (archive extraction) |
 | `podman` or `docker` | proton-builder (container engine for delegated builds) |
+
+### Python Frontend Dependencies
+
+| Package | Version | Used by |
+|---------|---------|---------|
+| `textual` | ≥ 0.80 | TUI launcher |
+| `click` | ≥ 8.1 | CLI (`looni` command) |
+| `tkinter` | (stdlib) | GUI launcher (usually pre-installed) |
+| `pytest` | ≥ 8.0 | Test suite (dev only) |
+| `pytest-asyncio` | ≥ 0.23 | Async test support (dev only) |
+
+Install with `pip install -e .` or `make py-dev` (which also installs dev deps).
 
 ### One-Liner (Debian/Ubuntu)
 
@@ -1182,7 +1372,8 @@ sudo apt install git make gcc g++ autoconf automake pkg-config \
     gcc-i686-linux-gnu g++-i686-linux-gnu \
     gcc-mingw-w64 g++-mingw-w64 \
     meson ninja-build glslang-tools \
-    rsync python3 curl ccache fzf zenity zstd
+    rsync python3 curl ccache fzf zenity zstd \
+    python3-tk python3-pip
 ```
 
 ---
@@ -1205,6 +1396,9 @@ clean up `~/.bashrc` entries.
 **Managed Wine installs** in `~/.local/share/looni-wine-installs/` are **kept** —
 use the Wine Install Manager to remove individual builds first, or delete the
 directory manually.
+
+**Python frontend:** `pip uninstall looni-build` removes the Python package and the
+`looni` console script.
 
 ---
 

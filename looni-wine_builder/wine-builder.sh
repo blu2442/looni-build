@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ╔═════════════════════════════════════════════════════════════════════════╗
-# ║              looni-wine_builder  •  multi-source  v1.1.0                ║
+# ║              looni-wine_builder  •  multi-source  v1.0.0                ║
 # ║                fetch  •  patch  •  compile  •  install                  ║
 # ╚═════════════════════════════════════════════════════════════════════════╝
 #
@@ -114,7 +114,7 @@ WOLF
     printf "\n"
     printf "  ╔═══════════════════════════════════════════════════════════╗\n"
     printf "  ║                                                           ║\n"
-    printf "  ║  🛠  looni-wine_builder  •  multi-source v1.1.0           ║\n"
+    printf "  ║  🛠  looni-wine_builder  •  multi-source v1.0.0           ║\n"
     printf "  ║       fetch  •  patch  •  compile  •  install             ║\n"
     printf "  ║                                                           ║\n"
     printf "  ╚═══════════════════════════════════════════════════════════╝\n"
