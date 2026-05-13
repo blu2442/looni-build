@@ -64,6 +64,7 @@ PROTON_I  := $(ROOT)looni-proton-install
 # neutron_builder: launcher + engine scripts
 NEUTRON_BIN  := neutron-builder.sh
 NEUTRON_LIBS := \
+    _output_common.sh \
     neutron-build-core.sh \
     neutron-dxvk-build.sh \
     neutron-vkd3d-build.sh \
@@ -83,6 +84,7 @@ PROTON_B_BIN  := proton-builder.sh
 # wine_builder: launcher + engine scripts
 WINE_BIN  := wine-builder.sh
 WINE_LIBS := \
+    _output_common.sh \
     wine-build-core.sh \
     build-32.sh \
     build-64.sh \
@@ -128,7 +130,8 @@ TOOLZ_MODULES := \
 
 # ── Phony targets ─────────────────────────────────────────────────────────────
 .PHONY: all install install-neutron install-proton install-wine install-hybrid install-neutron-hybrid install-toolz \
-        install-launcher install-neutron-install install-proton-install uninstall help _dirs _setup-path
+        install-launcher install-neutron-install install-proton-install uninstall help _dirs _setup-path \
+        py-dev py-test py-tui py-doctor py-clean
 
 all: help
 
@@ -338,6 +341,29 @@ uninstall:
 	    esac; \
 	fi
 
+# ── Python TUI frontend (looni-build Python app) ─────────────────────────────
+# The Python launcher wraps the shell engines with a Textual TUI + Click CLI.
+# Shell scripts still do all the actual build work — py-* targets are optional.
+
+py-dev:
+	@printf "\033[1;36m── installing Python package (editable) + dev deps\033[0m\n"
+	@python3 -m pip install --user --break-system-packages -e ".[dev]"
+	@printf "\n  ${C_B}✓  looni\033[0m is now available. Try: \033[1mlooni doctor\033[0m\n\n"
+
+py-test:
+	@python3 -m pytest -q
+
+py-tui:
+	@python3 -m looni_build
+
+py-doctor:
+	@python3 -m looni_build doctor
+
+py-clean:
+	@rm -rf build/ dist/ *.egg-info .pytest_cache/ .ruff_cache/ .mypy_cache/
+	@find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	@printf "  \033[1;32m✓\033[0m Python build artefacts cleaned\n"
+
 # ── help ──────────────────────────────────────────────────────────────────────
 help:
 	@printf "\n\033[1mlooni-build — Wine / Neutron / Proton builders + winetoolz\033[0m\n\n"
@@ -354,6 +380,12 @@ help:
 	@printf "  \033[1;36mmake install-toolz\033[0m           looni-winetoolz only\n"
 	@printf "  \033[1;36mmake uninstall\033[0m         Remove all installed files (asks about ~/.bashrc)\n"
 	@printf "  \033[1;36mmake help\033[0m              Show this message\n"
+	@printf "\n\033[1mPython TUI frontend (optional):\033[0m\n"
+	@printf "  \033[1;36mmake py-dev\033[0m            pip install -e .[dev] (editable install)\n"
+	@printf "  \033[1;36mmake py-test\033[0m           pytest\n"
+	@printf "  \033[1;36mmake py-tui\033[0m            open the Textual launcher\n"
+	@printf "  \033[1;36mmake py-doctor\033[0m         diagnose discovery of all 9 tools\n"
+	@printf "  \033[1;36mmake py-clean\033[0m          wipe Python build artefacts\n"
 	@printf "\n\033[1mVariables:\033[0m\n"
 	@printf "  PREFIX=<dir>    Install root  (default: $(HOME)/.local)\n"
 	@printf "  DESTDIR=<dir>   Staging root  (default: empty)\n"

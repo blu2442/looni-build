@@ -25,6 +25,15 @@ Thumbs.db
 .vscode/
 .idea/
 
-# ── Python cache ──────────────────────────────────────────────────────────────
+# ── Python cache + build artefacts ────────────────────────────────────────────
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/

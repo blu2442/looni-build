@@ -35,12 +35,9 @@ if [ -e /dev/tty ] && command -v tput >/dev/null 2>&1 && tput colors >/dev/tty 2
 else
     _R="" _B="" _GRN="" _BLU="" _YLW="" _RED="" _CYN="" _MAG="" _DIM=""
 fi
-msg()  { printf "${_GRN}==> ${_R}${_B}%s${_R}\n" "$*"; }
-msg2() { printf "${_BLU} -> ${_R}%s\n" "$*"; }
-warn() { printf "${_YLW}warn${_R} %s\n" "$*" >&2; }
-err()  { printf "${_RED}ERR!${_R} %s\n" "$*" >&2; exit 1; }
-ok()   { printf "${_GRN} ✓  ${_R}%s\n" "$*"; }
-sep()  { printf "\n${_BLU}${_B}── %s ──${_R}\n" "$*"; }
+# Source common output helpers (uses the _* color variables set above)
+_CORE_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+. "${_CORE_DIR}/_output_common.sh"
 
 # ══════════════════════════════════════════════════════════════════════════
 #  Validate / default required environment

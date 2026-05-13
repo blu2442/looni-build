@@ -71,14 +71,21 @@ else
     C_R="" C_B="" C_GRN="" C_BLU="" C_YLW="" C_RED="" C_CYN="" C_MAG="" C_DIM=""
 fi
 
-msg()     { printf "${C_GRN}==> ${C_R}${C_B}%s${C_R}\n" "$*"; }
-msg2()    { printf "${C_BLU} -> ${C_R}%s\n" "$*"; }
-ok()      { printf "${C_GRN} ✓  ${C_R}%s\n" "$*"; }
-warn()    { printf "${C_YLW}warn${C_R} %s\n" "$*" >&2; }
-err()     { printf "${C_RED}ERR!${C_R} %s\n" "$*" >&2; exit 1; }
-section() { printf "\n${C_CYN}${C_B}── %s ──${C_R}\n" "$*"; }
-dim()     { printf "${C_DIM}%s${C_R}\n" "$*"; }
-run()     { printf "${C_BLU}    \$${C_R} %s\n" "$*"; [ "${DRY_RUN:-0}" -eq 1 ] || "$@"; }
+# ── Resolve _LIB_DIR early so we can source _output_common.sh from it ────
+if [ -f "${SCRIPT_DIR}/neutron-build-core.sh" ]; then
+    _LIB_DIR="$SCRIPT_DIR"
+elif [ -f "${SCRIPT_DIR}/../lib/looni-neutron_builder/neutron-build-core.sh" ]; then
+    _LIB_DIR="$(cd "${SCRIPT_DIR}/../lib/looni-neutron_builder" && pwd)"
+else
+    _LIB_DIR=""
+fi
+
+# Source common output helpers (uses the C_* color variables set above)
+if [ -n "$_LIB_DIR" ] && [ -f "${_LIB_DIR}/_output_common.sh" ]; then
+    . "${_LIB_DIR}/_output_common.sh"
+elif [ -f "${SCRIPT_DIR}/_output_common.sh" ]; then
+    . "${SCRIPT_DIR}/_output_common.sh"
+fi
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Banner

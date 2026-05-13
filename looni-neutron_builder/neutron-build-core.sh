@@ -39,12 +39,9 @@ else
     _R="" _B="" _GRN="" _BLU="" _YLW="" _RED="" _DIM=""
     _MAG="" _CYN="" _DIM_="" _R_=""
 fi
-msg()  { printf "${_MAG}==> ${_R}${_B}%s${_R}\n" "$*"; }
-msg2() { printf "${_CYN} -> ${_R}%s\n" "$*"; }
-warn() { printf "${_YLW}warn${_R} %s\n" "$*" >&2; }
-err()  { printf "${_RED}ERR!${_R} %s\n" "$*" >&2; exit 1; }
-ok()   { printf "${_MAG} ✓  ${_R}%s\n" "$*"; }
-sep()  { printf "\n${_CYN}${_B}── %s ──${_R}\n" "$*"; }
+# Source common output helpers (uses the _* color variables set above)
+_NCORE_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+. "${_NCORE_DIR}/_output_common.sh"
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Validate / default required environment

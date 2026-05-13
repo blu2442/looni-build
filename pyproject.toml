@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "looni-build"
+version = "1.5.0"
+description = "Wine / Neutron / Proton build toolkit — Python TUI/GUI frontend over the shell engines"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Luna" }]
+keywords = ["wine", "proton", "neutron", "steam", "dxvk", "vkd3d", "linux-gaming"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console :: Curses",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Games/Entertainment",
+    "Topic :: System :: Emulators",
+]
+dependencies = [
+    "textual>=0.80,<2.0",
+    "click>=8.1,<9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "textual-dev>=1.5",
+]
+
+[project.scripts]
+looni = "looni_build.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/blu2442/looni-build"
+Issues = "https://github.com/blu2442/looni-build/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["looni_build"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"

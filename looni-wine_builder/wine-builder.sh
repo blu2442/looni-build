@@ -66,14 +66,24 @@ else
     C_R="" C_B="" C_GRN="" C_BLU="" C_YLW="" C_RED="" C_CYN="" C_MAG="" C_DIM=""
 fi
 
-msg()     { printf "${C_GRN}==> ${C_R}${C_B}%s${C_R}\n" "$*"; }
-msg2()    { printf "${C_BLU} -> ${C_R}%s\n" "$*"; }
-ok()      { printf "${C_GRN} ✓  ${C_R}%s\n" "$*"; }
-warn()    { printf "${C_YLW}warn${C_R} %s\n" "$*" >&2; }
-err()     { printf "${C_RED}ERR!${C_R} %s\n" "$*" >&2; exit 1; }
-section() { printf "\n${C_CYN}${C_B}── %s ──${C_R}\n" "$*"; }
-dim()     { printf "${C_DIM}%s${C_R}\n" "$*"; }
-run()     { printf "${C_BLU}    \$${C_R} %s\n" "$*"; [ "${DRY_RUN:-0}" -eq 1 ] || "$@"; }
+# ── Resolve _LIB_DIR early so we can source _output_common.sh from it ────
+# _LIB_DIR is used by the path resolution below; we just need its value
+# before the full resolution block runs.
+if [ -f "${SCRIPT_DIR}/wine-build-core.sh" ]; then
+    _LIB_DIR="$SCRIPT_DIR"
+elif [ -f "${SCRIPT_DIR}/../lib/looni-wine_builder/wine-build-core.sh" ]; then
+    _LIB_DIR="$(cd "${SCRIPT_DIR}/../lib/looni-wine_builder" && pwd)"
+else
+    _LIB_DIR=""
+fi
+
+# Source common output helpers (uses the C_* color variables set above)
+if [ -n "$_LIB_DIR" ] && [ -f "${_LIB_DIR}/_output_common.sh" ]; then
+    . "${_LIB_DIR}/_output_common.sh"
+elif [ -f "${SCRIPT_DIR}/_output_common.sh" ]; then
+    # Fallback: when running from the source tree before _LIB_DIR is resolved
+    . "${SCRIPT_DIR}/_output_common.sh"
+fi
 
 # ══════════════════════════════════════════════════════════════════════════
 #  Banner
@@ -555,6 +565,28 @@ source_menu() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+#  _strip_version_prefix
+#  Strips well-known Wine/Proton branch/tag prefixes from a ref string.
+#  Used by both _tag_to_display and _extract_version_suffix so the prefix
+#  list stays in one place.
+#
+#  Strips: wine-staging-, wine-, proton_, v
+#  Examples:
+#    wine-10.6         →  10.6
+#    wine-staging-10.6 →  staging-10.6  (only first match)
+#    proton_8.0        →  8.0
+#    v9.21             →  9.21
+# ══════════════════════════════════════════════════════════════════════════
+_strip_version_prefix() {
+    local v="$1"
+    v="${v#wine-staging-}"
+    v="${v#wine-}"
+    v="${v#proton_}"
+    v="${v#v}"
+    printf '%s' "$v"
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 #  _extract_version_suffix
 #  Strips well-known prefixes from a tag/branch name and returns the bare
 #  version string, or nothing if it doesn't look like a version.
@@ -570,11 +602,8 @@ source_menu() {
 # ══════════════════════════════════════════════════════════════════════════
 _extract_version_suffix() {
     local ref="$1"
-    local v="$ref"
-    v="${v#wine-staging-}"
-    v="${v#wine-}"
-    v="${v#proton_}"
-    v="${v#v}"
+    local v
+    v="$(_strip_version_prefix "$ref")"
     # Only return it if the result starts with a digit
     [[ "$v" =~ ^[0-9] ]] && printf '%s' "$v" || true
 }
@@ -592,24 +621,20 @@ _extract_version_suffix() {
 # ══════════════════════════════════════════════════════════════════════════
 _tag_to_display() {
     local tag="$1" key="$2"
-    local ver="${tag}"
+    local ver
+    ver="$(_strip_version_prefix "$tag")"
 
     case "$key" in
         mainline|experimental|tkg-patched)
-            ver="${tag#wine-}"
             printf 'Wine %s' "$ver"
             ;;
         staging)
-            ver="${tag#wine-staging-}"
-            ver="${ver#wine-}"
             printf 'Wine Staging %s' "$ver"
             ;;
         proton|proton-experimental)
-            ver="${tag#proton_}"
             printf 'Valve Bleeding Edge %s' "$ver"
             ;;
         kron4ek)
-            ver="${tag#wine-}"
             printf 'Kron4ek Wine %s' "$ver"
             ;;
         *)

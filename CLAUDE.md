@@ -23,3 +23,20 @@ looni-build is a Wine/Neutron/Proton build toolkit for Linux gaming. Shell scrip
 - GE's protonprep script expects wine/wine-staging/dxvk/vkd3d-proton as sibling dirs with git repos
 - `set -euo pipefail` is used — watch for grep exit code 1 in pipelines
 - Build logs: `~/.local/share/looni-neutron_builder/buildz/build-run/*/build.log`
+
+## Python frontend (new in v1.5.0)
+- `looni_build/` — Textual TUI + Click CLI over the shell engines. Shell scripts still do the work.
+- Entry points: `looni` console script, `python -m looni_build`, `make py-tui`
+- Modules:
+  - `looni_build.core.tools` — Tool dataclass + catalogue of the 9 shell tools
+  - `looni_build.core.discovery` — `find_tool()` / `resolve_root()` (port of `_find_tool` in looni-build.sh)
+  - `looni_build.core.runner` — subprocess launcher with TTY handoff + SIGINT-ignored parent
+  - `looni_build.tui.app` — Textual LauncherApp (banner, grouped OptionList, refresh)
+  - `looni_build.tui.progress` — parser for `==>` / `── ──` / ` ✓ ` / `warn` / `ERR!` markers
+  - `looni_build.tui.build_runner` — pure-async `stream_build()` that pumps subprocess output through the parser
+  - `looni_build.tui.build_screen` — Textual screen wiring stream_build to a live log + ProgressBar
+  - `looni_build.cli` — Click commands: `launch`, `build`, `list`, `doctor`, `version`
+- Install: `make py-dev` (user editable install). Tests: `make py-test` (64 tests).
+- Two launch paths: `looni launch TOOL` (full TTY handoff, for fzf/zenity tools) vs `looni build TOOL` (captured output + live progress screen, for non-interactive builds).
+- `$LOONI_ROOT` overrides source-tree detection; useful for dev.
+- When adding a new shell tool: append a `Tool(...)` entry in `looni_build/core/tools.py`.
